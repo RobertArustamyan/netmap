@@ -1,0 +1,13 @@
+# Backend dependencies — pin versions before deploying to production
+fastapi
+uvicorn[standard]
+sqlalchemy[asyncio]
+asyncpg
+alembic
+pydantic-settings
+supabase
+stripe
+python-jose[cryptography]
+python-multipart
+httpx
+python-dotenv

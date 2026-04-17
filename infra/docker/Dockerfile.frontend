@@ -1,0 +1,2 @@
+# Frontend Dockerfile — Next.js
+# Stages: deps → builder → runner (standalone output)

@@ -1,0 +1,2 @@
+# Backend Dockerfile — Python FastAPI
+# Stages: deps → build → runtime

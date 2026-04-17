@@ -1,0 +1,3 @@
+# docker-compose for local development.
+# Services: backend (FastAPI), frontend (Next.js), nginx
+# Note: Supabase and Neo4j run externally (cloud / local install).
