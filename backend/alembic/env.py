@@ -6,7 +6,8 @@ from alembic import context
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import create_async_engine
 
-load_dotenv()
+load_dotenv()          # backend/.env
+load_dotenv("../.env", override=False)  # root .env fallback
 
 # Alembic config
 config = context.config
