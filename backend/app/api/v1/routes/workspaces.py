@@ -6,12 +6,34 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user, get_db
+from app.models.contact import Contact
 from app.models.member import Member, MemberRole
 from app.models.user import User
 from app.models.workspace import Workspace
+from app.schemas.contact import ContactRead, ContactUpdate, MemberProfileRead
 from app.schemas.workspace import MemberRead, MemberRoleUpdate, WorkspaceCreate, WorkspaceRead, WorkspaceUpdate, WorkspaceWithInvite
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
+
+
+async def _create_self_contact(
+    db: AsyncSession,
+    workspace_id: uuid.UUID,
+    user: User,
+    member: Member,
+) -> None:
+    """Create a self-contact node for a member and link it to the member row."""
+    contact = Contact(
+        id=uuid.uuid4(),
+        workspace_id=workspace_id,
+        added_by_user_id=user.id,
+        name=user.display_name or user.email,
+        email=user.email,
+        is_self=True,
+    )
+    db.add(contact)
+    await db.flush()
+    member.self_contact_id = contact.id
 
 
 def _slugify(name: str) -> str:
@@ -63,6 +85,9 @@ async def create_workspace(
         role=MemberRole.admin,
     )
     db.add(member)
+    await db.flush()  # get member.id before creating self-contact
+
+    await _create_self_contact(db, workspace.id, current_user, member)
     await db.commit()
     await db.refresh(workspace)
 
@@ -308,3 +333,86 @@ async def remove_member(
 
     await db.delete(target_member)
     await db.commit()
+
+
+@router.get("/{workspace_id}/me", response_model=MemberProfileRead)
+async def get_my_profile(
+    workspace_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the caller's self-contact and profile_complete status within a workspace."""
+    member_result = await db.execute(
+        select(Member).where(
+            Member.workspace_id == workspace_id,
+            Member.user_id == current_user.id,
+        )
+    )
+    member = member_result.scalar_one_or_none()
+    if member is None:
+        raise HTTPException(status_code=404, detail="Not a member of this workspace")
+
+    if member.self_contact_id is None:
+        raise HTTPException(status_code=404, detail="Self-contact not found for this member")
+
+    contact_result = await db.execute(
+        select(Contact).where(Contact.id == member.self_contact_id)
+    )
+    contact = contact_result.scalar_one_or_none()
+    if contact is None:
+        raise HTTPException(status_code=404, detail="Self-contact not found")
+
+    return MemberProfileRead(
+        contact=ContactRead.model_validate(contact),
+        profile_complete=member.profile_complete,
+    )
+
+
+@router.patch("/{workspace_id}/me", response_model=MemberProfileRead)
+async def update_my_profile(
+    workspace_id: uuid.UUID,
+    payload: ContactUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update the caller's self-contact profile within a workspace."""
+    member_result = await db.execute(
+        select(Member).where(
+            Member.workspace_id == workspace_id,
+            Member.user_id == current_user.id,
+        )
+    )
+    member = member_result.scalar_one_or_none()
+    if member is None:
+        raise HTTPException(status_code=404, detail="Not a member of this workspace")
+
+    if member.self_contact_id is None:
+        raise HTTPException(status_code=404, detail="Self-contact not found for this member")
+
+    contact_result = await db.execute(
+        select(Contact).where(Contact.id == member.self_contact_id)
+    )
+    contact = contact_result.scalar_one_or_none()
+    if contact is None:
+        raise HTTPException(status_code=404, detail="Self-contact not found")
+
+    update_data = payload.model_dump(exclude_unset=True)
+
+    # Validate name if provided: must not be empty after stripping
+    if "name" in update_data:
+        name_val = update_data["name"].strip()
+        if not name_val:
+            raise HTTPException(status_code=422, detail="Contact name cannot be empty")
+        update_data["name"] = name_val
+
+    for field, value in update_data.items():
+        setattr(contact, field, value)
+
+    member.profile_complete = True
+    await db.commit()
+    await db.refresh(contact)
+
+    return MemberProfileRead(
+        contact=ContactRead.model_validate(contact),
+        profile_complete=True,
+    )

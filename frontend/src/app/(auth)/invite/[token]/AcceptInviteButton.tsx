@@ -42,7 +42,7 @@ export default function AcceptInviteButton({ token, workspaceName }: Props) {
     }
 
     const data = await res.json();
-    router.push(`/workspace/${data.workspace_id}`);
+    router.push(`/workspace/${data.workspace_id}/graph`);
   }
 
   return (

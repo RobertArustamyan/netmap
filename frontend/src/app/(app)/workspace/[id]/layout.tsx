@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
+import WorkspaceShell from "./WorkspaceShell";
 
 interface WorkspaceRead {
   id: string;
@@ -10,12 +11,32 @@ interface WorkspaceRead {
   created_at: string;
 }
 
+interface MeResponse {
+  contact: unknown;
+  profile_complete: boolean;
+}
+
 async function getWorkspace(
   id: string,
   accessToken: string
 ): Promise<WorkspaceRead | null> {
   const res = await fetch(
     `${process.env.NEXT_PUBLIC_API_URL}/api/v1/workspaces/${id}`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    }
+  );
+  if (!res.ok) return null;
+  return res.json();
+}
+
+async function getMe(
+  id: string,
+  accessToken: string
+): Promise<MeResponse | null> {
+  const res = await fetch(
+    `${process.env.NEXT_PUBLIC_API_URL}/api/v1/workspaces/${id}/me`,
     {
       headers: { Authorization: `Bearer ${accessToken}` },
       cache: "no-store",
@@ -45,7 +66,16 @@ export default async function WorkspaceLayout({
     data: { session },
   } = await supabase.auth.getSession();
 
-  const workspace = session ? await getWorkspace(id, session.access_token) : null;
+  const [workspace, me] = session
+    ? await Promise.all([
+        getWorkspace(id, session.access_token),
+        getMe(id, session.access_token),
+      ])
+    : [null, null];
+
+  // Default to true so we don't block if the API is unavailable
+  const profileComplete = me?.profile_complete ?? true;
+  const userEmail = user.email ?? "";
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -88,7 +118,16 @@ export default async function WorkspaceLayout({
         </nav>
       </header>
 
-      <main className="flex-1">{children}</main>
+      <main className="flex-1">
+        <WorkspaceShell
+          workspaceId={id}
+          workspaceName={workspace?.name ?? "Workspace"}
+          profileComplete={profileComplete}
+          userEmail={userEmail}
+        >
+          {children}
+        </WorkspaceShell>
+      </main>
     </div>
   );
 }

@@ -44,8 +44,16 @@ class ContactRead(BaseModel):
     email: str | None
     phone: str | None
     notes: str | None
+    is_self: bool = False
     created_at: datetime
     updated_at: datetime
     tags: list[TagRead] = []
 
     model_config = {"from_attributes": True, "extra": "ignore"}
+
+
+class MemberProfileRead(BaseModel):
+    contact: ContactRead
+    profile_complete: bool
+
+    model_config = {"from_attributes": True}

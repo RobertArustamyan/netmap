@@ -28,6 +28,7 @@ interface ContactRead {
   name: string;
   job_title: string | null;
   company: string | null;
+  is_self: boolean;
 }
 
 interface EdgeRead {
@@ -66,9 +67,26 @@ function randomPosition(): { x: number; y: number } {
 interface ContactNodeData {
   label: string;
   subtitle: string;
+  is_self: boolean;
 }
 
 function ContactNode({ data }: NodeProps<ContactNodeData>) {
+  if (data.is_self) {
+    return (
+      <div className="bg-indigo-600 border border-indigo-700 rounded-lg shadow-sm px-4 py-3 min-w-[140px] max-w-[200px] cursor-default">
+        <Handle type="target" position={Position.Top} className="!bg-indigo-300" />
+        <span className="inline-block text-[10px] font-semibold uppercase tracking-wide text-indigo-200 bg-indigo-500 rounded-full px-1.5 py-0.5 mb-1">
+          Member
+        </span>
+        <p className="text-sm font-semibold text-white truncate">{data.label}</p>
+        {data.subtitle && (
+          <p className="text-xs text-indigo-200 mt-0.5 truncate">{data.subtitle}</p>
+        )}
+        <Handle type="source" position={Position.Bottom} className="!bg-indigo-300" />
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white border border-gray-200 rounded-lg shadow-sm px-4 py-3 min-w-[140px] max-w-[200px] cursor-default">
       <Handle type="target" position={Position.Top} className="!bg-primary" />
@@ -345,6 +363,7 @@ export default function GraphClient({ workspaceId }: GraphClientProps) {
           data: {
             label: c.name,
             subtitle: c.job_title ?? c.company ?? "",
+            is_self: c.is_self,
           },
         }));
 

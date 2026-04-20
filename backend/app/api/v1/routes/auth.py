@@ -10,6 +10,7 @@ from app.models.member import Member, MemberRole
 from app.models.user import User
 from app.models.workspace import Workspace
 from app.schemas.workspace import InviteInfo, WorkspaceWithInvite
+from app.api.v1.routes.workspaces import _create_self_contact
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -119,6 +120,13 @@ async def accept_invite(
         role=MemberRole.member,
     )
     db.add(member)
+    await db.flush()  # get member.id before creating self-contact
+
+    await _create_self_contact(db, workspace.id, current_user, member)
     await db.commit()
 
-    return {"workspace_id": str(workspace.id), "workspace_name": workspace.name}
+    return {
+        "workspace_id": str(workspace.id),
+        "workspace_name": workspace.name,
+        "profile_complete": False,
+    }
