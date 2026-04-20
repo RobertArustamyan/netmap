@@ -1,1 +1,14 @@
-// Main graph canvas view: React Flow canvas, search bar, contact detail side panel.
+import GraphClient from "./GraphClient";
+
+export default async function GraphPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  return (
+    <div className="h-[calc(100vh-57px)]">
+      <GraphClient workspaceId={id} />
+    </div>
+  );
+}
