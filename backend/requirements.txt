@@ -1,13 +1,17 @@
-# Backend dependencies — pin versions before deploying to production
 fastapi
 uvicorn[standard]
 sqlalchemy[asyncio]
 asyncpg
 alembic
 pydantic-settings
+pydantic[email]
 supabase
 stripe
 python-jose[cryptography]
 python-multipart
 httpx
 python-dotenv
+pytest
+pytest-asyncio
+pytest-cov
+aiosqlite
