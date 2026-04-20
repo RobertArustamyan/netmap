@@ -1,7 +1,15 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import ContactForm from "./ContactForm";
+import { createClient } from "@/lib/supabase";
+
+export interface TagRead {
+  id: string;
+  workspace_id: string;
+  name: string;
+  color: string | null;
+}
 
 export interface ContactRead {
   id: string;
@@ -16,6 +24,7 @@ export interface ContactRead {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  tags: TagRead[];
 }
 
 interface Props {
@@ -23,22 +32,69 @@ interface Props {
   initialContacts: ContactRead[];
 }
 
+const API = process.env.NEXT_PUBLIC_API_URL;
+
+async function getAccessToken(): Promise<string> {
+  const supabase = createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  return session?.access_token ?? "";
+}
+
 export default function ContactsClient({ workspaceId, initialContacts }: Props) {
   const [contacts, setContacts] = useState<ContactRead[]>(initialContacts);
   const [search, setSearch] = useState("");
   const [panelOpen, setPanelOpen] = useState(false);
   const [editing, setEditing] = useState<ContactRead | null>(null);
+  const [workspaceTags, setWorkspaceTags] = useState<TagRead[]>([]);
+  const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
+
+  // Fetch workspace tags once on mount
+  useEffect(() => {
+    async function fetchTags() {
+      const token = await getAccessToken();
+      const res = await fetch(`${API}/api/v1/workspaces/${workspaceId}/tags`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data: TagRead[] = await res.json();
+        setWorkspaceTags(data);
+      }
+    }
+    fetchTags();
+  }, [workspaceId]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return contacts;
-    return contacts.filter(
-      (c) =>
+    return contacts.filter((c) => {
+      const matchesText =
+        !q ||
         c.name.toLowerCase().includes(q) ||
         (c.company ?? "").toLowerCase().includes(q) ||
-        (c.job_title ?? "").toLowerCase().includes(q)
-    );
-  }, [contacts, search]);
+        (c.job_title ?? "").toLowerCase().includes(q);
+
+      const matchesTags =
+        activeTags.size === 0 ||
+        [...activeTags].every((tagId) =>
+          (c.tags ?? []).some((t) => t.id === tagId)
+        );
+
+      return matchesText && matchesTags;
+    });
+  }, [contacts, search, activeTags]);
+
+  function toggleActiveTag(tagId: string) {
+    setActiveTags((prev) => {
+      const next = new Set(prev);
+      if (next.has(tagId)) {
+        next.delete(tagId);
+      } else {
+        next.add(tagId);
+      }
+      return next;
+    });
+  }
 
   function openAdd() {
     setEditing(null);
@@ -72,6 +128,24 @@ export default function ContactsClient({ workspaceId, initialContacts }: Props) 
     closePanel();
   }
 
+  // Called by ContactForm when tags change so the list view stays in sync
+  function handleContactTagsChange(contactId: string, tags: TagRead[]) {
+    setContacts((prev) =>
+      prev.map((c) => (c.id === contactId ? { ...c, tags } : c))
+    );
+    // Also update the editing contact so the panel reflects latest state
+    setEditing((prev) =>
+      prev && prev.id === contactId ? { ...prev, tags } : prev
+    );
+  }
+
+  // Called by ContactForm when a new tag is created so the filter row stays current
+  function handleWorkspaceTagCreated(tag: TagRead) {
+    setWorkspaceTags((prev) =>
+      prev.some((t) => t.id === tag.id) ? prev : [...prev, tag]
+    );
+  }
+
   return (
     <div className="px-6 py-8 max-w-5xl mx-auto">
       {/* Toolbar */}
@@ -90,6 +164,37 @@ export default function ContactsClient({ workspaceId, initialContacts }: Props) 
           Add contact
         </button>
       </div>
+
+      {/* Tag filter chips */}
+      {workspaceTags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {workspaceTags.map((tag) => {
+            const isActive = activeTags.has(tag.id);
+            return (
+              <button
+                key={tag.id}
+                onClick={() => toggleActiveTag(tag.id)}
+                className={`text-xs font-medium px-2 py-0.5 rounded-full border transition-colors ${
+                  isActive
+                    ? "text-white border-transparent"
+                    : "text-foreground border-border bg-background hover:bg-accent"
+                }`}
+                style={isActive ? { backgroundColor: tag.color ?? "#6b7280", borderColor: "transparent" } : {}}
+              >
+                {tag.name}
+              </button>
+            );
+          })}
+          {activeTags.size > 0 && (
+            <button
+              onClick={() => setActiveTags(new Set())}
+              className="text-xs text-muted-foreground hover:text-foreground px-1 underline"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Count */}
       <p className="text-sm text-muted-foreground mb-4">
@@ -129,6 +234,9 @@ export default function ContactsClient({ workspaceId, initialContacts }: Props) 
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">
                   Company
                 </th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">
+                  Tags
+                </th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">
                   Email
                 </th>
@@ -152,6 +260,19 @@ export default function ContactsClient({ workspaceId, initialContacts }: Props) 
                   </td>
                   <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
                     {contact.company ?? <span className="text-border">—</span>}
+                  </td>
+                  <td className="px-4 py-3 hidden md:table-cell">
+                    <div className="flex flex-wrap gap-1">
+                      {(contact.tags ?? []).map((tag) => (
+                        <span
+                          key={tag.id}
+                          className="text-xs font-medium px-1.5 py-0.5 rounded-full text-white"
+                          style={{ backgroundColor: tag.color ?? "#6b7280" }}
+                        >
+                          {tag.name}
+                        </span>
+                      ))}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground hidden lg:table-cell">
                     {contact.email ?? <span className="text-border">—</span>}
@@ -212,6 +333,8 @@ export default function ContactsClient({ workspaceId, initialContacts }: Props) 
                 onSave={handleSave}
                 onDelete={editing ? handleDelete : undefined}
                 onCancel={closePanel}
+                onTagsChange={handleContactTagsChange}
+                onWorkspaceTagCreated={handleWorkspaceTagCreated}
               />
             </div>
           </div>

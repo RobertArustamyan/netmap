@@ -2,6 +2,8 @@ import uuid
 from datetime import datetime
 from pydantic import BaseModel, field_validator
 
+from app.schemas.tags import TagRead
+
 
 class ContactCreate(BaseModel):
     name: str
@@ -44,5 +46,6 @@ class ContactRead(BaseModel):
     notes: str | None
     created_at: datetime
     updated_at: datetime
+    tags: list[TagRead] = []
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "extra": "ignore"}

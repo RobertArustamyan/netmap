@@ -15,6 +15,7 @@ interface ContactRead {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  tags: { id: string; workspace_id: string; name: string; color: string | null }[];
 }
 
 export default async function ContactsPage({

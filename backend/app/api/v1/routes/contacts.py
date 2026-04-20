@@ -1,4 +1,5 @@
 import uuid
+from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -7,10 +8,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.dependencies import get_current_user, get_db
 from app.models.contact import Contact
 from app.models.member import Member
+from app.models.tag import ContactTag, Tag
 from app.models.user import User
 from app.schemas.contact import ContactCreate, ContactRead, ContactUpdate
+from app.schemas.tags import TagRead
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/contacts", tags=["contacts"])
+
+
+async def _fetch_tags_by_contact(
+    contact_ids: list[uuid.UUID], db: AsyncSession
+) -> dict[uuid.UUID, list[TagRead]]:
+    """Return a mapping of contact_id -> list[TagRead] for the given contact IDs."""
+    if not contact_ids:
+        return {}
+    tag_rows = await db.execute(
+        select(ContactTag, Tag)
+        .join(Tag, Tag.id == ContactTag.tag_id)
+        .where(ContactTag.contact_id.in_(contact_ids))
+    )
+    tags_by_contact: dict[uuid.UUID, list[TagRead]] = defaultdict(list)
+    for ct, tag in tag_rows.all():
+        tags_by_contact[ct.contact_id].append(TagRead.model_validate(tag))
+    return tags_by_contact
 
 
 async def _require_member(workspace_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSession) -> None:
@@ -42,7 +62,7 @@ async def create_contact(
     db.add(contact)
     await db.commit()
     await db.refresh(contact)
-    return contact
+    return ContactRead(**contact.__dict__, tags=[])
 
 
 @router.get("", response_model=list[ContactRead])
@@ -58,7 +78,12 @@ async def list_contacts(
         .where(Contact.workspace_id == workspace_id)
         .order_by(Contact.name)
     )
-    return result.scalars().all()
+    contacts = result.scalars().all()
+    tags_by_contact = await _fetch_tags_by_contact([c.id for c in contacts], db)
+    return [
+        ContactRead(**c.__dict__, tags=tags_by_contact.get(c.id, []))
+        for c in contacts
+    ]
 
 
 @router.get("/{cid}", response_model=ContactRead)
@@ -76,7 +101,8 @@ async def get_contact(
     contact = result.scalar_one_or_none()
     if contact is None:
         raise HTTPException(status_code=404, detail="Contact not found")
-    return contact
+    tags_by_contact = await _fetch_tags_by_contact([contact.id], db)
+    return ContactRead(**contact.__dict__, tags=tags_by_contact.get(contact.id, []))
 
 
 @router.patch("/{cid}", response_model=ContactRead)
@@ -101,7 +127,8 @@ async def update_contact(
 
     await db.commit()
     await db.refresh(contact)
-    return contact
+    tags_by_contact = await _fetch_tags_by_contact([contact.id], db)
+    return ContactRead(**contact.__dict__, tags=tags_by_contact.get(contact.id, []))
 
 
 @router.delete("/{cid}", status_code=204)

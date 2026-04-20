@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase";
-import type { ContactRead } from "./ContactsClient";
+import type { ContactRead, TagRead } from "./ContactsClient";
 
 interface ContactFormProps {
   workspaceId: string;
@@ -10,9 +10,24 @@ interface ContactFormProps {
   onSave: (contact: ContactRead) => void;
   onDelete?: () => void;
   onCancel: () => void;
+  onTagsChange?: (contactId: string, tags: TagRead[]) => void;
+  onWorkspaceTagCreated?: (tag: TagRead) => void;
 }
 
 const API = process.env.NEXT_PUBLIC_API_URL;
+
+const TAG_PALETTE = [
+  "#6366f1",
+  "#10b981",
+  "#f59e0b",
+  "#ef4444",
+  "#3b82f6",
+  "#8b5cf6",
+];
+
+function tagColor(name: string): string {
+  return TAG_PALETTE[name.charCodeAt(0) % TAG_PALETTE.length];
+}
 
 async function getAccessToken(): Promise<string> {
   const supabase = createClient();
@@ -28,6 +43,8 @@ export default function ContactForm({
   onSave,
   onDelete,
   onCancel,
+  onTagsChange,
+  onWorkspaceTagCreated,
 }: ContactFormProps) {
   const isEdit = !!contact;
 
@@ -41,6 +58,30 @@ export default function ContactForm({
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Tags state
+  const [contactTags, setContactTags] = useState<TagRead[]>(
+    contact?.tags ?? []
+  );
+  const [workspaceTags, setWorkspaceTags] = useState<TagRead[]>([]);
+  const [tagInput, setTagInput] = useState("");
+  const [tagLoading, setTagLoading] = useState(false);
+  const [tagError, setTagError] = useState("");
+
+  // Fetch workspace tags on mount
+  useEffect(() => {
+    async function fetchTags() {
+      const token = await getAccessToken();
+      const res = await fetch(`${API}/api/v1/workspaces/${workspaceId}/tags`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data: TagRead[] = await res.json();
+        setWorkspaceTags(data);
+      }
+    }
+    fetchTags();
+  }, [workspaceId]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -80,7 +121,8 @@ export default function ContactForm({
     }
 
     const saved: ContactRead = await res.json();
-    onSave(saved);
+    // Merge in the current contactTags since the API response may not include them
+    onSave({ ...saved, tags: contactTags });
   }
 
   async function handleDelete() {
@@ -108,6 +150,102 @@ export default function ContactForm({
       onDelete();
     } else {
       setError("Failed to delete contact.");
+    }
+  }
+
+  async function handleAddTag(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = tagInput.trim();
+    if (!trimmed) return;
+
+    // Can only attach tags when editing an existing contact
+    if (!contact) {
+      setTagError("Save the contact first, then add tags.");
+      return;
+    }
+
+    // Check if the tag is already attached
+    if (contactTags.some((t) => t.name.toLowerCase() === trimmed.toLowerCase())) {
+      setTagInput("");
+      return;
+    }
+
+    setTagLoading(true);
+    setTagError("");
+
+    const token = await getAccessToken();
+
+    // Find or create the tag in workspace tags
+    let tag = workspaceTags.find(
+      (t) => t.name.toLowerCase() === trimmed.toLowerCase()
+    );
+
+    if (!tag) {
+      // Create it
+      const color = tagColor(trimmed);
+      const createRes = await fetch(
+        `${API}/api/v1/workspaces/${workspaceId}/tags`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ name: trimmed, color }),
+        }
+      );
+
+      if (!createRes.ok) {
+        const data = await createRes.json().catch(() => ({}));
+        setTagError(data?.detail ?? "Failed to create tag.");
+        setTagLoading(false);
+        return;
+      }
+
+      tag = (await createRes.json()) as TagRead;
+      setWorkspaceTags((prev) => [...prev, tag!]);
+      onWorkspaceTagCreated?.(tag!);
+    }
+
+    // Attach the tag to the contact
+    const attachRes = await fetch(
+      `${API}/api/v1/workspaces/${workspaceId}/tags/contacts/${contact.id}/tags/${tag.id}`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+
+    setTagLoading(false);
+
+    if (!attachRes.ok && attachRes.status !== 201) {
+      const data = await attachRes.json().catch(() => ({}));
+      setTagError(data?.detail ?? "Failed to attach tag.");
+      return;
+    }
+
+    const newTags = [...contactTags, tag!];
+    setContactTags(newTags);
+    onTagsChange?.(contact.id, newTags);
+    setTagInput("");
+  }
+
+  async function handleRemoveTag(tagId: string) {
+    if (!contact) return;
+
+    const token = await getAccessToken();
+    const res = await fetch(
+      `${API}/api/v1/workspaces/${workspaceId}/tags/contacts/${contact.id}/tags/${tagId}`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+
+    if (res.ok || res.status === 204) {
+      const newTags = contactTags.filter((t) => t.id !== tagId);
+      setContactTags(newTags);
+      onTagsChange?.(contact.id, newTags);
     }
   }
 
@@ -238,6 +376,70 @@ export default function ContactForm({
           placeholder="Any context about this contact…"
           className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
         />
+      </div>
+
+      {/* Tags */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-foreground">Tags</label>
+
+        {/* Attached tag pills */}
+        {contactTags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {contactTags.map((tag) => (
+              <span
+                key={tag.id}
+                className="inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full text-white"
+                style={{ backgroundColor: tag.color ?? "#6b7280" }}
+              >
+                {tag.name}
+                {isEdit && (
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveTag(tag.id)}
+                    aria-label={`Remove tag ${tag.name}`}
+                    className="ml-0.5 leading-none hover:opacity-75 transition-opacity"
+                  >
+                    ×
+                  </button>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Add tag input — only shown when editing an existing contact */}
+        {isEdit ? (
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleAddTag(e as unknown as React.FormEvent);
+                }
+              }}
+              placeholder="Add a tag…"
+              className="flex-1 rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              disabled={tagLoading}
+            />
+            <button
+              type="button"
+              onClick={handleAddTag}
+              disabled={tagLoading || !tagInput.trim()}
+              className="rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {tagLoading ? "…" : "Add"}
+            </button>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Save the contact first to add tags.
+          </p>
+        )}
+
+        {tagError && <p className="text-xs text-destructive">{tagError}</p>}
       </div>
 
       {/* Inline error */}
