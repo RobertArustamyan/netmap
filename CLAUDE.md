@@ -39,14 +39,14 @@ netmap/
 │   │   ├── api/
 │   │   │   └── v1/
 │   │   │       └── routes/         One file per domain
-│   │   │           ├── auth.py
-│   │   │           ├── workspaces.py
-│   │   │           ├── members.py
-│   │   │           ├── contacts.py
-│   │   │           ├── edges.py
-│   │   │           ├── search.py
-│   │   │           ├── billing.py
-│   │   │           └── admin.py    Superadmin only
+│   │   │           ├── auth.py         ✅ invite preview/accept, token rotation
+│   │   │           ├── workspaces.py   ✅ CRUD, members, /me profile endpoints
+│   │   │           ├── contacts.py     ✅ CRUD + tags included in response
+│   │   │           ├── edges.py        ✅ CRUD
+│   │   │           ├── tags.py         ✅ CRUD + attach/detach to contacts
+│   │   │           ├── search.py       ✅ workspace contact search (name/company/title/email/tags)
+│   │   │           ├── billing.py      🔲 not yet implemented
+│   │   │           └── admin.py        🔲 not yet implemented
 │   │   ├── core/
 │   │   │   ├── config.py           Settings from env
 │   │   │   ├── security.py         JWT validation, role guards
@@ -55,19 +55,20 @@ netmap/
 │   │   │   ├── session.py          Supabase/asyncpg session
 │   │   │   └── migrations/         Alembic migration files
 │   │   ├── models/                 SQLAlchemy ORM models
-│   │   │   ├── user.py
-│   │   │   ├── workspace.py
-│   │   │   ├── member.py
-│   │   │   ├── contact.py
-│   │   │   ├── edge.py
-│   │   │   ├── tag.py
-│   │   │   └── plan.py
+│   │   │   ├── user.py             ✅
+│   │   │   ├── workspace.py        ✅ invite_token
+│   │   │   ├── member.py           ✅ role, self_contact_id, profile_complete
+│   │   │   ├── contact.py          ✅ is_self flag
+│   │   │   ├── edge.py             ✅ source/target contacts, label, notes
+│   │   │   ├── tag.py              ✅ Tag + ContactTag junction
+│   │   │   └── plan.py             🔲 not yet implemented
 │   │   ├── schemas/                Pydantic request/response
-│   │   │   ├── user.py
-│   │   │   ├── workspace.py
-│   │   │   ├── contact.py
-│   │   │   ├── edge.py
-│   │   │   └── billing.py
+│   │   │   ├── user.py             ✅
+│   │   │   ├── workspace.py        ✅ MemberProfileRead
+│   │   │   ├── contact.py          ✅ includes tags[] and is_self
+│   │   │   ├── edge.py             ✅
+│   │   │   ├── tags.py             ✅
+│   │   │   └── billing.py          🔲 not yet implemented
 │   │   ├── services/               Business logic (no HTTP here)
 │   │   │   ├── workspace_service.py
 │   │   │   ├── contact_service.py
@@ -91,12 +92,15 @@ netmap/
 │   │   │   ├── (marketing)/        Public pages (landing, pricing)
 │   │   │   ├── (auth)/             Login, signup, invite accept
 │   │   │   ├── (app)/              Protected app shell
-│   │   │   │   ├── dashboard/
+│   │   │   │   ├── dashboard/          ✅ workspace list + create
 │   │   │   │   ├── workspace/[id]/
-│   │   │   │   │   ├── graph/      Main canvas view
-│   │   │   │   │   ├── contacts/   List / detail view
-│   │   │   │   │   └── settings/
-│   │   │   │   └── settings/       User account settings
+│   │   │   │   │   ├── layout.tsx      ✅ fetches /me, shows ProfileSetupModal if incomplete
+│   │   │   │   │   ├── ProfileSetupModal.tsx  ✅ blocking, no close until submitted
+│   │   │   │   │   ├── WorkspaceShell.tsx     ✅ client wrapper managing modal state
+│   │   │   │   │   ├── graph/          ✅ React Flow canvas, member nodes (indigo), connect/delete edges, search filter
+│   │   │   │   │   ├── contacts/       ✅ table + tag badges + tag filter chips + add/edit panel
+│   │   │   │   │   └── settings/       ✅ rename, members, invite link, delete workspace
+│   │   │   │   └── settings/           🔲 user account settings (stub)
 │   │   │   └── (admin)/            Superadmin panel
 │   │   │       ├── analytics/      PostHog dashboard embed
 │   │   │       ├── users/
@@ -148,11 +152,33 @@ netmap/
 | Concept | Description |
 |---|---|
 | **Workspace** | Shared environment; members collectively own the contact graph |
-| **Contact (Node)** | A person: name, title, company, LinkedIn, notes, tags |
-| **Relationship (Edge)** | A connection between two contacts, owned by a member |
-| **Member** | Authenticated user belonging to ≥1 workspace |
+| **Contact (Node)** | A person: name, title, company, LinkedIn, notes, tags. `is_self=True` means the node belongs to a member. |
+| **Self-contact** | Auto-created Contact for each member (`is_self=True`, linked via `member.self_contact_id`). Filled in via profile-setup modal on first workspace entry. Styled distinctly (indigo) on the graph. |
+| **Relationship (Edge)** | A connection between any two contacts, drawn on the graph canvas |
+| **Member** | Authenticated user belonging to ≥1 workspace. Has `self_contact_id` + `profile_complete` flags. |
+| **Tag** | Colored label attached to contacts. Workspace-scoped. Filterable on contacts list and searchable. |
 | **Plan** | free / paid tier on a workspace; enforces seat + node limits |
 | **Superadmin** | Platform operator role; full read/write access to all data |
+
+---
+
+## Database Migrations (Alembic)
+
+Run from `backend/` directory. Loads `.env` from `backend/` then falls back to `../.env`.
+
+```bash
+alembic upgrade head    # apply all pending migrations
+alembic current         # show current revision
+```
+
+| Revision | Description |
+|---|---|
+| 001 | Initial schema — users, workspaces, members |
+| 002 | Contacts + tags + contact_tags |
+| 003 | Edges (relationships between contacts) |
+| 004 | Self-contact — `is_self` on contacts, `self_contact_id` + `profile_complete` on members |
+
+**Always run `alembic upgrade head` after pulling new migrations.**
 
 ---
 
@@ -173,9 +199,10 @@ Required GitHub repository secrets:
 
 ## Plan Enforcement Rules (Backend)
 Every mutating endpoint checks workspace plan limits before committing:
-- Free tier: max N members, max M contacts per workspace (TBD with billing page)
+- Free tier: max N members, max M contacts per workspace (TBD — define on pricing page before implementing)
 - Enforcement lives in `plan_service.py`, called from route handlers
 - Plan status comes from Stripe webhook → stored in `plans` table
+- **Not yet implemented** — build after `/pricing` page defines the limits
 
 ---
 
@@ -192,19 +219,30 @@ Route group: `(admin)/` in Next.js, protected by superadmin role middleware.
 ---
 
 ## Feature Build Order
-1. User auth + invite links to workspace
-2. Workspace creation and member management
-3. Add / edit / delete contacts (nodes) with metadata
-4. Draw / edit relationships (edges) between contacts
-5. Interactive graph canvas (drag, zoom, pan)
-6. Search & filter with on-graph highlighting
-7. Tags and categories on contacts
-8. Free vs paid plan enforcement (seat / node limits)
-9. Stripe billing and subscription management
-10. Second-degree path discovery ("who knows X?")
-11. Contact import (CSV)
-12. Email notifications
-13. Admin panel (PostHog analytics + DB viewer + superadmin controls)
+
+Legend: ✅ Done | 🔲 Not started
+
+1. ✅ User auth + invite links to workspace
+2. ✅ Workspace creation and member management
+3. ✅ Add / edit / delete contacts (nodes) with metadata
+4. ✅ Draw / edit relationships (edges) between contacts
+5. ✅ Interactive graph canvas (drag, zoom, pan)
+6. ✅ Search & filter (API + on-graph highlighting)
+7. ✅ Tags and categories on contacts (backend + frontend)
+   ✅ Members as contact nodes — each member gets an `is_self` contact node in their workspace;
+      blocking profile-setup modal on first entry; member nodes styled distinctly on graph
+8. 🔲 Free vs paid plan enforcement (seat / node limits)
+9. 🔲 Stripe billing and subscription management
+10. 🔲 Second-degree path discovery ("who knows X?")
+11. 🔲 Contact import (CSV)
+12. 🔲 Email notifications
+13. 🔲 Admin panel (PostHog analytics + DB viewer + superadmin controls)
+
+### Outstanding smaller items
+- `/pricing` page — stub only, needs real UI before Stripe
+- `/settings` user account page — stub only
+- Fix 4 pre-existing TypeScript errors in `middleware.ts`, `supabase-server.ts`,
+  `login/page.tsx`, `WorkspaceSettingsClient.tsx`
 
 ---
 
