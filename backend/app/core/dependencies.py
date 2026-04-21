@@ -29,11 +29,9 @@ async def get_current_user(
         user = User(id=user_id, email=email)
         db.add(user)
         await db.commit()
-        await db.refresh(user)
     elif user.email != email:
         user.email = email
         await db.commit()
-        await db.refresh(user)
 
     return user
 

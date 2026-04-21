@@ -56,26 +56,21 @@ export default async function WorkspaceLayout({
   const { id } = await params;
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login");
-
+  // getSession reads from cookie — no network call. Middleware already verified auth.
   const {
     data: { session },
   } = await supabase.auth.getSession();
 
-  const [workspace, me] = session
-    ? await Promise.all([
-        getWorkspace(id, session.access_token),
-        getMe(id, session.access_token),
-      ])
-    : [null, null];
+  if (!session?.user) redirect("/login");
+
+  const [workspace, me] = await Promise.all([
+    getWorkspace(id, session.access_token),
+    getMe(id, session.access_token),
+  ]);
 
   // Default to true so we don't block if the API is unavailable
   const profileComplete = me?.profile_complete ?? true;
-  const userEmail = user.email ?? "";
+  const userEmail = session.user.email ?? "";
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
