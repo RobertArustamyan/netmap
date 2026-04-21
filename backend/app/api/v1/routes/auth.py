@@ -11,6 +11,7 @@ from app.models.user import User
 from app.models.workspace import Workspace
 from app.schemas.workspace import InviteInfo, WorkspaceWithInvite
 from app.api.v1.routes.workspaces import _create_self_contact
+from app.services.plan_service import check_member_limit
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -113,6 +114,9 @@ async def accept_invite(
     )
     if existing.scalar_one_or_none() is not None:
         raise HTTPException(status_code=409, detail="You are already a member of this workspace")
+
+    # Enforce member limit before adding
+    await check_member_limit(workspace.id, db)
 
     member = Member(
         workspace_id=workspace.id,

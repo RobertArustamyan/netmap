@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.dependencies import get_current_user, get_db
 from app.models.contact import Contact
 from app.models.member import Member, MemberRole
+from app.models.plan import Plan
 from app.models.user import User
 from app.models.workspace import Workspace
 from app.schemas.contact import ContactRead, ContactUpdate, MemberProfileRead
@@ -88,6 +89,11 @@ async def create_workspace(
     await db.flush()  # get member.id before creating self-contact
 
     await _create_self_contact(db, workspace.id, current_user, member)
+
+    # Auto-create a free-tier plan for every new workspace
+    plan = Plan(workspace_id=workspace.id)
+    db.add(plan)
+
     await db.commit()
     await db.refresh(workspace)
 

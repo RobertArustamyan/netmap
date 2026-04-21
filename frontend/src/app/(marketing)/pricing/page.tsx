@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 const FREE_FEATURES = [
-  { label: "Up to 3 members", included: true },
+  { label: "Up to 5 members", included: true },
   { label: "Up to 100 contacts", included: true },
   { label: "Up to 200 relationships", included: true },
   { label: "Tags & categories", included: true },
@@ -27,7 +27,7 @@ const PRO_FEATURES = [
 ];
 
 const ALL_FEATURES = [
-  { label: "Members", free: "Up to 3", pro: "Unlimited" },
+  { label: "Members", free: "Up to 5", pro: "Unlimited" },
   { label: "Contacts", free: "Up to 100", pro: "Unlimited" },
   { label: "Relationships", free: "Up to 200", pro: "Unlimited" },
   { label: "Tags & categories", free: true, pro: true },

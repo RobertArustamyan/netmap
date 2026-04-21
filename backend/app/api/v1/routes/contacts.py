@@ -12,6 +12,7 @@ from app.models.tag import ContactTag, Tag
 from app.models.user import User
 from app.schemas.contact import ContactCreate, ContactRead, ContactUpdate
 from app.schemas.tags import TagRead
+from app.services.plan_service import check_contact_limit
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/contacts", tags=["contacts"])
 
@@ -52,6 +53,7 @@ async def create_contact(
     db: AsyncSession = Depends(get_db),
 ):
     await _require_member(workspace_id, current_user.id, db)
+    await check_contact_limit(workspace_id, db)
 
     contact = Contact(
         id=uuid.uuid4(),

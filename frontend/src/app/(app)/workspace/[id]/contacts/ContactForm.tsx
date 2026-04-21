@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase";
 import type { ContactRead, TagRead } from "./ContactsClient";
 
@@ -58,6 +59,7 @@ export default function ContactForm({
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [planLimitError, setPlanLimitError] = useState("");
 
   // Tags state
   const [contactTags, setContactTags] = useState<TagRead[]>(
@@ -89,6 +91,7 @@ export default function ContactForm({
 
     setLoading(true);
     setError("");
+    setPlanLimitError("");
 
     const body: Record<string, string> = { name: name.trim() };
     if (jobTitle.trim()) body.job_title = jobTitle.trim();
@@ -113,6 +116,19 @@ export default function ContactForm({
     });
 
     setLoading(false);
+
+    if (res.status === 402) {
+      const body = await res.json().catch(() => ({}));
+      const detail = body?.detail;
+      if (detail?.code === "plan_limit_exceeded") {
+        setPlanLimitError(
+          `Contact limit reached (${detail.current}/${detail.limit}). Upgrade to Pro for unlimited contacts.`
+        );
+      } else {
+        setPlanLimitError("Contact limit reached. Upgrade to Pro.");
+      }
+      return;
+    }
 
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
@@ -444,6 +460,14 @@ export default function ContactForm({
 
       {/* Inline error */}
       {error && <p className="text-xs text-destructive">{error}</p>}
+      {planLimitError && (
+        <div className="text-xs text-destructive space-y-1">
+          <p>{planLimitError}</p>
+          <Link href="/pricing" className="underline hover:opacity-75 transition-opacity">
+            View plans
+          </Link>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex items-center justify-between pt-1">

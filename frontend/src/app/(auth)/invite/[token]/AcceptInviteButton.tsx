@@ -34,6 +34,18 @@ export default function AcceptInviteButton({ token, workspaceName }: Props) {
       }
     );
 
+    if (res.status === 402) {
+      const body = await res.json().catch(() => ({}));
+      const detail = body?.detail;
+      setError(
+        detail?.code === "plan_limit_exceeded"
+          ? `This workspace has reached its member limit (${detail.current}/${detail.limit}). The owner needs to upgrade to Pro.`
+          : "This workspace has reached its member limit."
+      );
+      setLoading(false);
+      return;
+    }
+
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       setError(body.detail ?? "Something went wrong");
