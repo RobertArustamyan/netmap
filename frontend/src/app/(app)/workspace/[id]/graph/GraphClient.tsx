@@ -38,9 +38,21 @@ interface EdgeRead {
   target_contact_id: string;
   label: string | null;
   notes: string | null;
-  created_by_user_id: string;
+  created_by_user_id: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface PathStep {
+  contact: ContactRead;
+  via_edge: EdgeRead | null;
+}
+
+interface PathResult {
+  found: boolean;
+  paths: PathStep[][];
+  from_contact: ContactRead;
+  to_contact: ContactRead;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -126,6 +138,13 @@ function InnerGraph({
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const { fitView } = useReactFlow();
 
+  // ── Path-find state ────────────────────────────────────────────────────────
+  const [pathMode, setPathMode] = useState(false);
+  const [pathFrom, setPathFrom] = useState<string | null>(null);
+  const [pathTo, setPathTo] = useState<string | null>(null);
+  const [pathResult, setPathResult] = useState<PathResult | null>(null);
+  const [pathLoading, setPathLoading] = useState(false);
+
   // Keep nodes in sync when initialRFNodes changes (e.g. after data load)
   useEffect(() => {
     setNodes(initialRFNodes);
@@ -137,6 +156,9 @@ function InnerGraph({
 
   // ── Search / filter: dim non-matching nodes ─────────────────────────────
   useEffect(() => {
+    // Don't apply search highlighting when path mode is active
+    if (pathMode) return;
+
     const q = search.trim().toLowerCase();
     setNodes((prev) =>
       prev.map((node) => {
@@ -153,7 +175,145 @@ function InnerGraph({
         };
       })
     );
-  }, [search, setNodes]);
+  }, [search, setNodes, pathMode]);
+
+  // ── Path-find: fetch path from API ─────────────────────────────────────────
+  useEffect(() => {
+    if (!pathFrom || !pathTo) return;
+
+    let cancelled = false;
+
+    async function fetchPath() {
+      setPathLoading(true);
+      setPathResult(null);
+
+      try {
+        const token = await getAccessToken();
+        const url = `${API}/api/v1/workspaces/${workspaceId}/paths?from_contact_id=${pathFrom}&to_contact_id=${pathTo}`;
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!res.ok || cancelled) return;
+
+        const result: PathResult = await res.json();
+        if (cancelled) return;
+
+        setPathResult(result);
+
+        // Apply highlighting
+        if (result.found && result.paths.length > 0) {
+          const pathNodes = new Set(result.paths[0].map((s) => s.contact.id));
+          const pathEdgeIds = new Set(
+            result.paths[0]
+              .map((s) => s.via_edge?.id)
+              .filter((id): id is string => Boolean(id))
+          );
+
+          setNodes((prev) =>
+            prev.map((node) => ({
+              ...node,
+              style: {
+                ...node.style,
+                opacity: pathNodes.has(node.id) ? 1 : 0.25,
+                outline: pathNodes.has(node.id)
+                  ? "2px solid #22c55e"
+                  : undefined,
+                outlineOffset: pathNodes.has(node.id) ? "2px" : undefined,
+                borderRadius: pathNodes.has(node.id) ? "10px" : undefined,
+                boxShadow: pathNodes.has(node.id)
+                  ? "0 0 0 4px rgba(134,239,172,0.5)"
+                  : undefined,
+              },
+            }))
+          );
+
+          setEdges((prev) =>
+            prev.map((edge) => ({
+              ...edge,
+              style: pathEdgeIds.has(edge.id)
+                ? { stroke: "#22c55e", strokeWidth: 3 }
+                : { opacity: 0.15 },
+              animated: pathEdgeIds.has(edge.id),
+            }))
+          );
+        } else {
+          // No path: reset styles
+          setNodes((prev) =>
+            prev.map((node) => ({
+              ...node,
+              style: {
+                ...node.style,
+                opacity: 1,
+                outline: undefined,
+                outlineOffset: undefined,
+                borderRadius: undefined,
+                boxShadow: undefined,
+              },
+            }))
+          );
+          setEdges((prev) =>
+            prev.map((edge) => ({
+              ...edge,
+              style: {},
+              animated: false,
+            }))
+          );
+        }
+      } catch {
+        // silently ignore network errors
+      } finally {
+        if (!cancelled) setPathLoading(false);
+      }
+    }
+
+    fetchPath();
+    return () => {
+      cancelled = true;
+    };
+  }, [pathFrom, pathTo, workspaceId, setNodes, setEdges]);
+
+  // ── Clear path mode ─────────────────────────────────────────────────────────
+  const clearPath = useCallback(() => {
+    setPathMode(false);
+    setPathFrom(null);
+    setPathTo(null);
+    setPathResult(null);
+    setPathLoading(false);
+
+    // Restore all nodes and edges to default appearance
+    setNodes((prev) =>
+      prev.map((node) => ({
+        ...node,
+        style: {
+          opacity: 1,
+          outline: undefined,
+          outlineOffset: undefined,
+          borderRadius: undefined,
+          boxShadow: undefined,
+        },
+      }))
+    );
+    setEdges((prev) =>
+      prev.map((edge) => ({
+        ...edge,
+        style: {},
+        animated: false,
+      }))
+    );
+  }, [setNodes, setEdges]);
+
+  // ── Toggle path mode ────────────────────────────────────────────────────────
+  const togglePathMode = useCallback(() => {
+    if (pathMode) {
+      clearPath();
+    } else {
+      setPathMode(true);
+      setPathFrom(null);
+      setPathTo(null);
+      setPathResult(null);
+    }
+  }, [pathMode, clearPath]);
 
   // ── Connect handler: POST edge to API ────────────────────────────────────
   const onConnect = useCallback(
@@ -198,12 +358,48 @@ function InnerGraph({
     [workspaceId, setEdges, onEdgeCreated]
   );
 
+  // ── Node click: path-find mode handler ───────────────────────────────────
+  const onNodeClick = useCallback(
+    (_: React.MouseEvent, node: Node) => {
+      if (!pathMode) return;
+      if (pathLoading) return;
+
+      if (!pathFrom) {
+        setPathFrom(node.id);
+        // Add green ring to the selected "from" node immediately
+        setNodes((prev) =>
+          prev.map((n) => ({
+            ...n,
+            style:
+              n.id === node.id
+                ? {
+                    ...n.style,
+                    outline: "2px solid #22c55e",
+                    outlineOffset: "2px",
+                    borderRadius: "10px",
+                    boxShadow: "0 0 0 4px rgba(134,239,172,0.5)",
+                  }
+                : n.style,
+          }))
+        );
+        return;
+      }
+
+      // Same node as from — ignore
+      if (node.id === pathFrom) return;
+
+      setPathTo(node.id);
+    },
+    [pathMode, pathLoading, pathFrom, setNodes]
+  );
+
   // ── Edge click: select / highlight ───────────────────────────────────────
   const onEdgeClick = useCallback(
     (_: React.MouseEvent, edge: RFEdge) => {
+      if (pathMode) return; // ignore edge clicks in path mode
       setSelectedEdgeId((prev) => (prev === edge.id ? null : edge.id));
     },
-    []
+    [pathMode]
   );
 
   // ── Delete selected edge ──────────────────────────────────────────────────
@@ -237,6 +433,22 @@ function InnerGraph({
 
   const selectedEdge = edges.find((e) => e.id === selectedEdgeId);
 
+  // ── Path panel display helpers ─────────────────────────────────────────────
+  const fromContact = pathFrom
+    ? contacts.find((c) => c.id === pathFrom)
+    : null;
+
+  const pathPanelStatus = (() => {
+    if (!pathFrom) return "Select start contact";
+    if (!pathTo && !pathLoading) return "Select end contact";
+    if (pathLoading) return null; // spinner shown separately
+    return null;
+  })();
+
+  const firstPath = pathResult?.found && pathResult.paths.length > 0
+    ? pathResult.paths[0]
+    : null;
+
   // ── Empty state ───────────────────────────────────────────────────────────
   if (contacts.length === 0) {
     return (
@@ -257,6 +469,7 @@ function InnerGraph({
         onConnect={onConnect}
         onEdgeClick={onEdgeClick}
         onPaneClick={onPaneClick}
+        onNodeClick={onNodeClick}
         nodeTypes={nodeTypes}
         fitView
         className="bg-gray-50"
@@ -281,7 +494,8 @@ function InnerGraph({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search contacts…"
-          className="rounded-md border border-gray-200 bg-white/90 backdrop-blur-sm px-3 py-1.5 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-52"
+          disabled={pathMode}
+          className="rounded-md border border-gray-200 bg-white/90 backdrop-blur-sm px-3 py-1.5 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-52 disabled:opacity-40"
         />
         <button
           onClick={() => fitView({ duration: 400 })}
@@ -289,10 +503,112 @@ function InnerGraph({
         >
           Fit view
         </button>
+        <button
+          onClick={togglePathMode}
+          className={`rounded-md border px-3 py-1.5 text-sm font-medium shadow-sm transition-colors ${
+            pathMode
+              ? "bg-indigo-600 border-indigo-700 text-white hover:bg-indigo-700"
+              : "border-gray-200 bg-white/90 backdrop-blur-sm text-gray-700 hover:bg-white"
+          }`}
+        >
+          Find path
+        </button>
       </div>
 
+      {/* Path-find panel */}
+      {pathMode && (
+        <div className="absolute top-3 right-3 z-10 w-72 rounded-lg border border-gray-200 bg-white/95 backdrop-blur-sm shadow-lg p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-gray-900">Path finder</h3>
+            <button
+              onClick={clearPath}
+              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+
+          {/* Status / instructions */}
+          {pathPanelStatus && !pathLoading && (
+            <p className="text-sm text-gray-600 mb-3">
+              {pathPanelStatus}
+            </p>
+          )}
+
+          {/* From contact chip */}
+          {fromContact && (
+            <div className="mb-2 flex items-center gap-2">
+              <span className="text-xs font-medium text-gray-500 shrink-0">From</span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-green-50 border border-green-200 px-2.5 py-0.5 text-xs font-medium text-green-800 truncate max-w-[180px]">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                {fromContact.name}
+              </span>
+            </div>
+          )}
+
+          {/* Loading spinner */}
+          {pathLoading && (
+            <div className="flex items-center gap-2 my-3">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-200 border-t-indigo-600 shrink-0" />
+              <span className="text-sm text-gray-500">Finding path…</span>
+            </div>
+          )}
+
+          {/* Result: path found */}
+          {!pathLoading && pathResult && pathResult.found && firstPath && (
+            <div className="mt-2">
+              <p className="text-xs font-medium text-green-700 mb-1.5">
+                Path found: {firstPath.length - 1} hop{firstPath.length - 1 !== 1 ? "s" : ""}
+              </p>
+              <p className="text-sm text-gray-800 leading-relaxed break-words">
+                {firstPath.map((s) => s.contact.name).join(" → ")}
+              </p>
+              <button
+                onClick={clearPath}
+                className="mt-3 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+              >
+                Clear
+              </button>
+            </div>
+          )}
+
+          {/* Result: no path found */}
+          {!pathLoading && pathResult && !pathResult.found && (
+            <div className="mt-2">
+              <p className="text-sm text-gray-500">
+                No connection found between these contacts.
+              </p>
+              <button
+                onClick={() => {
+                  setPathFrom(null);
+                  setPathTo(null);
+                  setPathResult(null);
+                  // Reset node/edge styles
+                  setNodes((prev) =>
+                    prev.map((node) => ({
+                      ...node,
+                      style: { opacity: 1 },
+                    }))
+                  );
+                  setEdges((prev) =>
+                    prev.map((edge) => ({
+                      ...edge,
+                      style: {},
+                      animated: false,
+                    }))
+                  );
+                }}
+                className="mt-3 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+              >
+                Try again
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Edge action bar: shown when an edge is selected */}
-      {selectedEdge && (
+      {selectedEdge && !pathMode && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-3 rounded-lg border border-gray-200 bg-white/95 backdrop-blur-sm px-4 py-2.5 shadow-lg">
           <span className="text-sm text-gray-600">
             {selectedEdge.label

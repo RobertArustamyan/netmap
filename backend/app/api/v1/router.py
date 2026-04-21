@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.v1.routes.auth import router as auth_router
 from app.api.v1.routes.contacts import router as contacts_router
 from app.api.v1.routes.edges import router as edges_router
+from app.api.v1.routes.paths import router as paths_router
 from app.api.v1.routes.search import router as search_router
 from app.api.v1.routes.tags import router as tags_router
 from app.api.v1.routes.workspaces import router as workspaces_router
@@ -18,3 +19,4 @@ v1_router.include_router(contacts_router)
 v1_router.include_router(edges_router)
 v1_router.include_router(tags_router)
 v1_router.include_router(search_router)
+v1_router.include_router(paths_router)
