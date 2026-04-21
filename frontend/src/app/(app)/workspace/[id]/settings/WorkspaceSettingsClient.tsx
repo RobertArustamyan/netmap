@@ -45,7 +45,7 @@ export default function WorkspaceSettingsClient({
 }: Props) {
   const router = useRouter();
   const params = useParams<{ id: string }>();
-  const workspaceId = params.id;
+  const workspaceId = params?.id ?? workspace.id;
 
   // ── Section 1: General ───────────────────────────────────────────────────
   const [workspaceName, setWorkspaceName] = useState(workspace.name);
