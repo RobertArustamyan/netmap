@@ -45,6 +45,7 @@ netmap/
 │   │   │           ├── edges.py        ✅ CRUD
 │   │   │           ├── tags.py         ✅ CRUD + attach/detach to contacts
 │   │   │           ├── search.py       ✅ workspace contact search (name/company/title/email/tags)
+│   │   │           ├── paths.py        ✅ BFS second-degree path discovery
 │   │   │           ├── billing.py      🔲 not yet implemented
 │   │   │           └── admin.py        🔲 not yet implemented
 │   │   ├── core/
@@ -61,7 +62,7 @@ netmap/
 │   │   │   ├── contact.py          ✅ is_self flag
 │   │   │   ├── edge.py             ✅ source/target contacts, label, notes
 │   │   │   ├── tag.py              ✅ Tag + ContactTag junction
-│   │   │   └── plan.py             🔲 not yet implemented
+│   │   │   └── plan.py             ✅ tier, max_members, max_contacts, stripe_subscription_id
 │   │   ├── schemas/                Pydantic request/response
 │   │   │   ├── user.py             ✅
 │   │   │   ├── workspace.py        ✅ MemberProfileRead
@@ -72,8 +73,8 @@ netmap/
 │   │   ├── services/               Business logic (no HTTP here)
 │   │   │   ├── workspace_service.py
 │   │   │   ├── contact_service.py
-│   │   │   ├── graph_service.py    Path-finding, second-degree
-│   │   │   ├── plan_service.py     Limit enforcement
+│   │   │   ├── graph_service.py    ✅ BFS all-shortest-paths (bidirectional, max_depth 6)
+│   │   │   ├── plan_service.py     ✅ check_member_limit / check_contact_limit (HTTP 402)
 │   │   │   ├── billing_service.py  Stripe integration
 │   │   │   └── admin_service.py
 │   │   ├── tasks/                  Background jobs (ARQ or Celery)
@@ -97,7 +98,7 @@ netmap/
 │   │   │   │   │   ├── layout.tsx      ✅ fetches /me, shows ProfileSetupModal if incomplete
 │   │   │   │   │   ├── ProfileSetupModal.tsx  ✅ blocking, no close until submitted
 │   │   │   │   │   ├── WorkspaceShell.tsx     ✅ client wrapper managing modal state
-│   │   │   │   │   ├── graph/          ✅ React Flow canvas, member nodes (indigo), connect/delete edges, search filter
+│   │   │   │   │   ├── graph/          ✅ React Flow canvas, member nodes (indigo), connect/delete edges, search filter, path finder (Find path toggle, BFS highlight)
 │   │   │   │   │   ├── contacts/       ✅ table + tag badges + tag filter chips + add/edit panel
 │   │   │   │   │   └── settings/       ✅ rename, members, invite link, delete workspace
 │   │   │   │   └── settings/           🔲 user account settings (stub)
@@ -177,6 +178,7 @@ alembic current         # show current revision
 | 002 | Contacts + tags + contact_tags |
 | 003 | Edges (relationships between contacts) |
 | 004 | Self-contact — `is_self` on contacts, `self_contact_id` + `profile_complete` on members |
+| 005 | Plans — `plans` table with tier, max_members (5), max_contacts (100), stripe_subscription_id |
 
 **Always run `alembic upgrade head` after pulling new migrations.**
 
@@ -199,10 +201,12 @@ Required GitHub repository secrets:
 
 ## Plan Enforcement Rules (Backend)
 Every mutating endpoint checks workspace plan limits before committing:
-- Free tier: max N members, max M contacts per workspace (TBD — define on pricing page before implementing)
-- Enforcement lives in `plan_service.py`, called from route handlers
-- Plan status comes from Stripe webhook → stored in `plans` table
-- **Not yet implemented** — build after `/pricing` page defines the limits
+- **Free tier:** max 5 members, max 100 contacts per workspace
+- **Pro tier:** unlimited (max_members / max_contacts set very high via Stripe webhook)
+- Enforcement lives in `plan_service.py` (`check_member_limit`, `check_contact_limit`), called from route handlers
+- Returns HTTP 402 with `{code: "plan_limit_exceeded", resource, limit, current}`
+- A free-tier `Plan` row is auto-created when a workspace is created
+- Plan upgrades: Stripe webhook updates the `plans` table (Stripe integration not yet implemented)
 
 ---
 
@@ -231,18 +235,21 @@ Legend: ✅ Done | 🔲 Not started
 7. ✅ Tags and categories on contacts (backend + frontend)
    ✅ Members as contact nodes — each member gets an `is_self` contact node in their workspace;
       blocking profile-setup modal on first entry; member nodes styled distinctly on graph
-8. 🔲 Free vs paid plan enforcement (seat / node limits)
+8. ✅ Free vs paid plan enforcement (seat / node limits)
+   - Plan model + migration 005; auto-created free plan on workspace creation
+   - HTTP 402 with structured detail when limit exceeded
+   - Frontend shows upgrade prompt + "View plans" link on 402
 9. 🔲 Stripe billing and subscription management
-10. 🔲 Second-degree path discovery ("who knows X?")
+10. ✅ Second-degree path discovery ("who knows X?")
+    - `GET /workspaces/{id}/paths?from_contact_id=&to_contact_id=` — BFS, bidirectional, max_depth 6
+    - Graph canvas: "Find path" toggle → click two nodes → path highlighted green, everything else dimmed
 11. 🔲 Contact import (CSV)
 12. 🔲 Email notifications
 13. 🔲 Admin panel (PostHog analytics + DB viewer + superadmin controls)
 
 ### Outstanding smaller items
-- `/pricing` page — stub only, needs real UI before Stripe
 - `/settings` user account page — stub only
-- Fix 4 pre-existing TypeScript errors in `middleware.ts`, `supabase-server.ts`,
-  `login/page.tsx`, `WorkspaceSettingsClient.tsx`
+- Stripe webhook to upgrade `plans.tier` + `max_members` / `max_contacts` (needed for Feature 9)
 
 ---
 
