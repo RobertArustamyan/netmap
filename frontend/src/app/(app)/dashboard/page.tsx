@@ -13,13 +13,14 @@ async function getWorkspaces(accessToken: string) {
 
 export default async function DashboardPage() {
   const supabase = await createClient();
-  // getSession reads from cookie — no network call. Middleware already verified auth.
-  const { data: { session } } = await supabase.auth.getSession();
+  const [{ data: { user } }, { data: { session } }] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase.auth.getSession(),
+  ]);
 
-  if (!session?.user) redirect("/login");
+  if (!user) redirect("/login");
 
-  const user = session.user;
-  const workspaces = await getWorkspaces(session.access_token);
+  const workspaces = await getWorkspaces(session?.access_token ?? "");
 
   return (
     <div className="min-h-screen bg-background">
