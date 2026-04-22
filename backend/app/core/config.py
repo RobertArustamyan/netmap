@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     # Stripe
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
+    stripe_price_id_pro: str = ""
+
+    # Email (Resend)
+    resend_api_key: str = ""
+    resend_from_domain: str = "netmap.app"
 
     # PostHog
     posthog_api_key: str = ""

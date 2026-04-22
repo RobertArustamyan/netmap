@@ -239,17 +239,29 @@ Legend: ✅ Done | 🔲 Not started
    - Plan model + migration 005; auto-created free plan on workspace creation
    - HTTP 402 with structured detail when limit exceeded
    - Frontend shows upgrade prompt + "View plans" link on 402
-9. 🔲 Stripe billing and subscription management
+9. ✅ Stripe billing and subscription management
+    - Backend: billing_service.py (checkout/portal/webhook), billing.py routes, migration 006 (stripe_customer_id)
+    - Webhook handles subscription.created/updated/deleted → upgrades/downgrades plans table
+    - Frontend: /plans pricing page, Plan & Billing section in workspace settings (upgrade/manage buttons)
+    - Env vars needed: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_ID_PRO
 10. ✅ Second-degree path discovery ("who knows X?")
     - `GET /workspaces/{id}/paths?from_contact_id=&to_contact_id=` — BFS, bidirectional, max_depth 6
     - Graph canvas: "Find path" toggle → click two nodes → path highlighted green, everything else dimmed
-11. 🔲 Contact import (CSV)
-12. 🔲 Email notifications
-13. 🔲 Admin panel (PostHog analytics + DB viewer + superadmin controls)
+11. ✅ Contact import (CSV)
+    - `POST /workspaces/{id}/contacts/import` — CSV upload, validates headers, plan-aware bulk insert
+    - Frontend: "Import CSV" button on contacts page → modal with file picker, loading state, results summary
+12. ✅ Email notifications
+    - backend/app/tasks/email.py — send_invite_email, send_welcome_email, send_member_joined_email via Resend API (httpx)
+    - Wired into accept_invite: notifies workspace owner as BackgroundTask on new member join
+    - Env vars needed: RESEND_API_KEY, RESEND_FROM_DOMAIN
+13. ✅ Admin panel (PostHog analytics + DB viewer + superadmin controls)
+    - Backend: GET/DELETE /admin/users, GET /admin/workspaces, PATCH /admin/workspaces/{id}/plan, GET /admin/subscriptions
+    - Frontend: /admin layout with sidebar + superadmin guard; Users, Workspaces, Analytics (placeholder), Subscriptions pages
 
 ### Outstanding smaller items
-- `/settings` user account page — stub only
-- Stripe webhook to upgrade `plans.tier` + `max_members` / `max_contacts` (needed for Feature 9)
+- `/settings` user account page — complete (email display, password change with re-auth, danger zone)
+  - Linked from dashboard header (email click) and workspace nav ("Account" link)
+- Stripe webhook to upgrade `plans.tier` + `max_members` / `max_contacts` — complete (POST /billing/webhook)
 
 ---
 

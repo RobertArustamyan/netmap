@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase";
 
 interface WorkspaceRead {
@@ -138,7 +139,98 @@ export default function WorkspaceSettingsClient({
     }
   }
 
-  // ── Section 3: Danger zone ───────────────────────────────────────────────
+  // ── Section 3: Billing / Plan ────────────────────────────────────────────
+  const [billingTier, setBillingTier] = useState<"free" | "pro" | null>(null);
+  const [billingLoading, setBillingLoading] = useState(true);
+  const [billingNotConfigured, setBillingNotConfigured] = useState(false);
+  const [billingActionLoading, setBillingActionLoading] = useState(false);
+  const [billingError, setBillingError] = useState("");
+
+  useEffect(() => {
+    async function fetchBillingStatus() {
+      const token = await getAccessToken();
+      const res = await fetch(
+        `${API}/api/v1/billing/status/${workspaceId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (res.status === 503) {
+        setBillingNotConfigured(true);
+      } else if (res.ok) {
+        const data = await res.json();
+        setBillingTier(data.tier === "pro" ? "pro" : "free");
+      }
+      setBillingLoading(false);
+    }
+    fetchBillingStatus();
+  }, [workspaceId]);
+
+  async function handleUpgrade() {
+    setBillingError("");
+    setBillingActionLoading(true);
+    const token = await getAccessToken();
+    const successUrl = `${window.location.origin}/dashboard?upgraded=1`;
+    const cancelUrl = window.location.href;
+    const res = await fetch(`${API}/api/v1/billing/checkout`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        workspace_id: workspaceId,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+      }),
+    });
+    setBillingActionLoading(false);
+    if (res.status === 503) {
+      setBillingNotConfigured(true);
+      return;
+    }
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setBillingError(body?.detail ?? "Failed to start checkout. Please try again.");
+      return;
+    }
+    const data = await res.json();
+    if (data.checkout_url) {
+      window.location.href = data.checkout_url;
+    }
+  }
+
+  async function handleManageSubscription() {
+    setBillingError("");
+    setBillingActionLoading(true);
+    const token = await getAccessToken();
+    const returnUrl = window.location.href;
+    const res = await fetch(`${API}/api/v1/billing/portal`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        workspace_id: workspaceId,
+        return_url: returnUrl,
+      }),
+    });
+    setBillingActionLoading(false);
+    if (res.status === 503) {
+      setBillingNotConfigured(true);
+      return;
+    }
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setBillingError(body?.detail ?? "Failed to open billing portal. Please try again.");
+      return;
+    }
+    const data = await res.json();
+    if (data.portal_url) {
+      window.location.href = data.portal_url;
+    }
+  }
+
+  // ── Section 4: Danger zone ───────────────────────────────────────────────
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
   const [deleteError, setDeleteError] = useState("");
@@ -328,7 +420,72 @@ export default function WorkspaceSettingsClient({
         </div>
       </section>
 
-      {/* ── Section 3: Danger zone ──────────────────────────────────────── */}
+      {/* ── Section 3: Plan & Billing ───────────────────────────────────── */}
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold text-foreground">Plan &amp; Billing</h2>
+        <div className="rounded-lg border border-border p-6 space-y-4">
+          {billingLoading ? (
+            <p className="text-sm text-muted-foreground">Loading plan info…</p>
+          ) : billingNotConfigured ? (
+            <p className="text-sm text-muted-foreground">
+              Billing not configured.{" "}
+              <Link href="/plans" className="underline hover:opacity-75 transition-opacity">
+                View plans
+              </Link>
+            </p>
+          ) : billingTier === "pro" ? (
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-foreground">Pro plan</span>
+                  <span className="rounded-full bg-primary/15 text-primary text-xs font-semibold px-2 py-0.5">
+                    Active
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Unlimited members and contacts.
+                </p>
+              </div>
+              <button
+                onClick={handleManageSubscription}
+                disabled={billingActionLoading}
+                className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              >
+                {billingActionLoading ? "Redirecting…" : "Manage subscription"}
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-foreground">Free plan</span>
+                  <span className="rounded-full bg-muted text-muted-foreground text-xs font-medium px-2 py-0.5">
+                    Current
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Up to 5 members and 100 contacts.{" "}
+                  <Link href="/plans" className="underline hover:opacity-75 transition-opacity">
+                    Compare plans
+                  </Link>
+                </p>
+              </div>
+              <button
+                onClick={handleUpgrade}
+                disabled={billingActionLoading}
+                className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              >
+                {billingActionLoading ? "Redirecting…" : "Upgrade to Pro"}
+              </button>
+            </div>
+          )}
+          {billingError && (
+            <p className="text-xs text-destructive">{billingError}</p>
+          )}
+        </div>
+      </section>
+
+      {/* ── Section 4: Danger zone ──────────────────────────────────────── */}
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-foreground">Danger zone</h2>
         <div className="rounded-lg border border-destructive/40 p-6">

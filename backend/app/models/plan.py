@@ -22,3 +22,6 @@ class Plan(Base):
     stripe_subscription_id: Mapped[str | None] = mapped_column(
         String(255), nullable=True
     )
+    stripe_customer_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )

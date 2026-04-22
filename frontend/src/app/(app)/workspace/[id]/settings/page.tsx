@@ -56,16 +56,7 @@ export default async function WorkspaceSettingsPage({
   const { id } = await params;
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login");
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
+  const { data: { session } } = await supabase.auth.getSession();
   if (!session) redirect("/login");
 
   const [workspace, members] = await Promise.all([
@@ -75,7 +66,7 @@ export default async function WorkspaceSettingsPage({
 
   if (!workspace) redirect("/dashboard");
 
-  const currentUserId = user.id;
+  const currentUserId = session.user.id;
   const currentMember = members.find((m) => m.user_id === currentUserId);
   const isAdmin =
     currentUserId === workspace.owner_id || currentMember?.role === "admin";

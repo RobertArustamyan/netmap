@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PROTECTED_PREFIXES = ["/dashboard", "/workspace", "/settings"];
+const PROTECTED_PREFIXES = ["/dashboard", "/workspace", "/settings", "/admin"];
 const AUTH_PATHS = ["/login", "/signup"];
 
 export async function middleware(request: NextRequest) {
@@ -28,21 +28,22 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Refresh session — required for Server Components to read auth state
-  const { data: { user } } = await supabase.auth.getUser();
+  // Use getSession (local JWT decode) instead of getUser (remote auth call)
+  // to avoid a round-trip to Supabase Auth on every request.
+  const { data: { session } } = await supabase.auth.getSession();
 
   const pathname = request.nextUrl.pathname;
   const isProtected = PROTECTED_PREFIXES.some((p) => pathname.startsWith(p));
   const isAuthPage = AUTH_PATHS.some((p) => pathname.startsWith(p));
 
-  if (isProtected && !user) {
+  if (isProtected && !session) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  if (isAuthPage && user) {
+  if (isAuthPage && session) {
     const dashboardUrl = request.nextUrl.clone();
     dashboardUrl.pathname = "/dashboard";
     return NextResponse.redirect(dashboardUrl);

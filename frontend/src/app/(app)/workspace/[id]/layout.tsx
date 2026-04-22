@@ -56,14 +56,11 @@ export default async function WorkspaceLayout({
   const { id } = await params;
 
   const supabase = await createClient();
-  const [{ data: { user } }, { data: { session } }] = await Promise.all([
-    supabase.auth.getUser(),
-    supabase.auth.getSession(),
-  ]);
-
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user;
   if (!user) redirect("/login");
 
-  const token = session?.access_token ?? "";
+  const token = session.access_token;
   const [workspace, me] = await Promise.all([
     getWorkspace(id, token),
     getMe(id, token),
@@ -110,6 +107,13 @@ export default async function WorkspaceLayout({
             className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           >
             Settings
+          </Link>
+          <Link
+            href="/settings"
+            className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            title="Account settings"
+          >
+            Account
           </Link>
         </nav>
       </header>

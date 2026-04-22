@@ -463,7 +463,7 @@ export default function ContactForm({
       {planLimitError && (
         <div className="text-xs text-destructive space-y-1">
           <p>{planLimitError}</p>
-          <Link href="/pricing" className="underline hover:opacity-75 transition-opacity">
+          <Link href="/plans" className="underline hover:opacity-75 transition-opacity">
             View plans
           </Link>
         </div>

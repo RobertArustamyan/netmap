@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import ProfileSetupModal from "./ProfileSetupModal";
+import PostHogIdentify from "@/components/PostHogIdentify";
 
 interface Props {
   children: React.ReactNode;
@@ -22,6 +23,7 @@ export default function WorkspaceShell({
 
   return (
     <>
+      <PostHogIdentify />
       {children}
       {showModal && (
         <ProfileSetupModal

@@ -1,6 +1,6 @@
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +12,7 @@ from app.models.workspace import Workspace
 from app.schemas.workspace import InviteInfo, WorkspaceWithInvite
 from app.api.v1.routes.workspaces import _create_self_contact
 from app.services.plan_service import check_member_limit
+from app.tasks.email import send_member_joined_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -95,6 +96,7 @@ async def preview_invite(
 )
 async def accept_invite(
     token: str,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -128,6 +130,17 @@ async def accept_invite(
 
     await _create_self_contact(db, workspace.id, current_user, member)
     await db.commit()
+
+    # Notify workspace owner
+    owner_result = await db.execute(select(User).where(User.id == workspace.owner_id))
+    owner = owner_result.scalar_one_or_none()
+    if owner and owner.email and owner.id != current_user.id:
+        background_tasks.add_task(
+            send_member_joined_email,
+            owner.email,
+            workspace.name,
+            current_user.email,
+        )
 
     return {
         "workspace_id": str(workspace.id),

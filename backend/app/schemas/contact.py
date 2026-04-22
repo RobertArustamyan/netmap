@@ -57,3 +57,14 @@ class MemberProfileRead(BaseModel):
     profile_complete: bool
 
     model_config = {"from_attributes": True}
+
+
+class CSVImportError(BaseModel):
+    row: int
+    reason: str
+
+
+class CSVImportResult(BaseModel):
+    imported: int
+    skipped: int
+    errors: list[CSVImportError]

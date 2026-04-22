@@ -8,9 +8,8 @@ from app.api.v1.routes.search import router as search_router
 from app.api.v1.routes.tags import router as tags_router
 from app.api.v1.routes.workspaces import router as workspaces_router
 
-# Placeholder imports — uncomment as features are built:
-# from app.api.v1.routes.billing import router as billing_router
-# from app.api.v1.routes.admin import router as admin_router
+from app.api.v1.routes.admin import router as admin_router
+from app.api.v1.routes.billing import router as billing_router
 
 v1_router = APIRouter(prefix="/api/v1")
 v1_router.include_router(auth_router)
@@ -20,3 +19,5 @@ v1_router.include_router(edges_router)
 v1_router.include_router(tags_router)
 v1_router.include_router(search_router)
 v1_router.include_router(paths_router)
+v1_router.include_router(admin_router)
+v1_router.include_router(billing_router)

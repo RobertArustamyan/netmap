@@ -13,20 +13,23 @@ async function getWorkspaces(accessToken: string) {
 
 export default async function DashboardPage() {
   const supabase = await createClient();
-  const [{ data: { user } }, { data: { session } }] = await Promise.all([
-    supabase.auth.getUser(),
-    supabase.auth.getSession(),
-  ]);
-
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user;
   if (!user) redirect("/login");
 
-  const workspaces = await getWorkspaces(session?.access_token ?? "");
+  const workspaces = await getWorkspaces(session.access_token);
 
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border px-6 py-4 flex items-center justify-between">
         <span className="font-semibold text-lg">NetMap</span>
-        <span className="text-sm text-muted-foreground">{user.email}</span>
+        <Link
+          href="/settings"
+          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+          title="Account settings"
+        >
+          {user.email}
+        </Link>
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-10 space-y-8">

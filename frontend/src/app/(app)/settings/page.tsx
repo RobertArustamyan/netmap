@@ -4,13 +4,10 @@ import SettingsClient from "./SettingsClient";
 
 export default async function AccountSettingsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login");
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) redirect("/login");
 
   return (
-    <SettingsClient email={user.email ?? ""} />
+    <SettingsClient email={session.user.email ?? ""} />
   );
 }
