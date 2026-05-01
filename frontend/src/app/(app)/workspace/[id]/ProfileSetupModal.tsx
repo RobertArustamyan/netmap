@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase";
+import { workspacesApi, ApiError } from "@/lib/api";
 
 interface Props {
   workspaceId: string;
@@ -9,8 +10,6 @@ interface Props {
   initialEmail?: string;
   onComplete: () => void;
 }
-
-const API = process.env.NEXT_PUBLIC_API_URL;
 
 async function getAccessToken(): Promise<string> {
   const supabase = createClient();
@@ -51,25 +50,12 @@ export default function ProfileSetupModal({
 
     try {
       const token = await getAccessToken();
-      const res = await fetch(`${API}/api/v1/workspaces/${workspaceId}/me`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setError(data?.detail ?? "Something went wrong. Please try again.");
-        setLoading(false);
-        return;
-      }
-
+      await workspacesApi.updateMe(token, workspaceId, body);
       onComplete();
-    } catch {
-      setError("Network error. Please try again.");
+    } catch (e) {
+      setError(
+        e instanceof ApiError ? e.message : "Network error. Please try again."
+      );
       setLoading(false);
     }
   }

@@ -1,3 +1,110 @@
 # docker-compose for local development.
-# Services: backend (FastAPI), frontend (Next.js), nginx
-# Note: Supabase and Neo4j run externally (cloud / local install).
+# Services: postgres (local DB), backend (FastAPI), frontend (Next.js), nginx (reverse proxy)
+# External services NOT containerised: Supabase Auth (cloud), Neo4j (optional, local install)
+#
+# Usage:
+#   docker compose up --build
+#
+# Tip: supply a backend/.env and frontend/.env.local before starting.
+# Never commit those files — they contain secrets.
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — local development database
+  # In production, replace with Supabase cloud connection string via env vars.
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: netmap
+      POSTGRES_PASSWORD: netmap
+      POSTGRES_DB: netmap
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Expose to host so you can connect with psql / DBeaver during dev
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U netmap -d netmap"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - netmap
+
+  # ---------------------------------------------------------------------------
+  # FastAPI backend
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ../..          # repo root — Dockerfile needs access to backend/
+      dockerfile: infra/docker/Dockerfile.backend
+    restart: unless-stopped
+    env_file:
+      - ../../backend/.env    # DATABASE_URL, SUPABASE_*, STRIPE_*, RESEND_*, etc.
+    environment:
+      # Override DATABASE_URL to point at the local postgres container.
+      # The backend/.env can still hold a Supabase URL for prod; this shadows it in dev.
+      DATABASE_URL: postgresql+asyncpg://netmap:netmap@postgres:5432/netmap
+    volumes:
+      # Mount source for hot-reload in dev (uvicorn --reload picks up changes)
+      - ../../backend:/app
+    ports:
+      - "8000:8000"
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - netmap
+
+  # ---------------------------------------------------------------------------
+  # Next.js frontend
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ../..          # repo root
+      dockerfile: infra/docker/Dockerfile.frontend
+    restart: unless-stopped
+    env_file:
+      - ../../frontend/.env.local   # NEXT_PUBLIC_SUPABASE_URL, etc.
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - netmap
+
+  # ---------------------------------------------------------------------------
+  # Nginx reverse proxy
+  # Routes: /api/ → backend:8000, / → frontend:3000
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"    # reserved for future TLS termination (certbot / manual cert)
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - netmap
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  netmap:
+    driver: bridge

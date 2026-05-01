@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import WorkspaceSettingsClient from "./WorkspaceSettingsClient";
+import { workspacesApi } from "@/lib/api";
 
 interface WorkspaceRead {
   id: string;
@@ -22,30 +23,22 @@ async function getWorkspace(
   id: string,
   accessToken: string
 ): Promise<WorkspaceRead | null> {
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL}/api/v1/workspaces/${id}`,
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      cache: "no-store",
-    }
-  );
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    return await workspacesApi.get(accessToken, id) as WorkspaceRead;
+  } catch {
+    return null;
+  }
 }
 
 async function getMembers(
   id: string,
   accessToken: string
 ): Promise<MemberRead[]> {
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL}/api/v1/workspaces/${id}/members`,
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      cache: "no-store",
-    }
-  );
-  if (!res.ok) return [];
-  return res.json();
+  try {
+    return await workspacesApi.listMembers(accessToken, id) as MemberRead[];
+  } catch {
+    return [];
+  }
 }
 
 export default async function WorkspaceSettingsPage({

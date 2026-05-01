@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase";
 import type { AdminWorkspace } from "./page";
-
-const API = process.env.NEXT_PUBLIC_API_URL;
+import { adminApi, ApiError } from "@/lib/api";
 
 async function getAccessToken(): Promise<string> {
   const supabase = createClient();
@@ -54,29 +53,13 @@ export default function WorkspacesClient({ initialWorkspaces, error }: Props) {
     setSaveError(null);
     try {
       const token = await getAccessToken();
-      const res = await fetch(
-        `${API}/api/v1/admin/workspaces/${workspaceId}/plan`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(editValues),
-        }
+      const updated = await adminApi.updateWorkspacePlan(token, workspaceId, { tier: editValues.tier }) as AdminWorkspace;
+      setWorkspaces((prev) =>
+        prev.map((w) => (w.id === workspaceId ? updated : w))
       );
-      if (res.ok) {
-        const updated: AdminWorkspace = await res.json();
-        setWorkspaces((prev) =>
-          prev.map((w) => (w.id === workspaceId ? updated : w))
-        );
-        closeEdit();
-      } else {
-        const body = await res.json().catch(() => ({}));
-        setSaveError(body?.detail ?? "Failed to update plan.");
-      }
-    } catch {
-      setSaveError("Network error. Please try again.");
+      closeEdit();
+    } catch (e) {
+      setSaveError(e instanceof ApiError ? e.message : "Network error. Please try again.");
     } finally {
       setSaving(false);
     }

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
 import WorkspaceShell from "./WorkspaceShell";
+import { workspacesApi } from "@/lib/api";
 
 interface WorkspaceRead {
   id: string;
@@ -20,30 +21,22 @@ async function getWorkspace(
   id: string,
   accessToken: string
 ): Promise<WorkspaceRead | null> {
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL}/api/v1/workspaces/${id}`,
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      cache: "no-store",
-    }
-  );
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    return await workspacesApi.get(accessToken, id) as WorkspaceRead;
+  } catch {
+    return null;
+  }
 }
 
 async function getMe(
   id: string,
   accessToken: string
 ): Promise<MeResponse | null> {
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL}/api/v1/workspaces/${id}/me`,
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      cache: "no-store",
-    }
-  );
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    return await workspacesApi.getMe(accessToken, id) as MeResponse;
+  } catch {
+    return null;
+  }
 }
 
 export default async function WorkspaceLayout({

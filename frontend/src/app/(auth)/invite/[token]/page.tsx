@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
 import AcceptInviteButton from "./AcceptInviteButton";
+import { authApi } from "@/lib/api";
 
 interface InviteInfo {
   workspace_id: string;
@@ -10,12 +11,11 @@ interface InviteInfo {
 }
 
 async function getInviteInfo(token: string): Promise<InviteInfo | null> {
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/invite/${token}`,
-    { cache: "no-store" }
-  );
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    return await authApi.getInvite(token) as InviteInfo;
+  } catch {
+    return null;
+  }
 }
 
 export default async function InvitePage({

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase";
 import type { ContactRead, TagRead } from "./ContactsClient";
+import { contactsApi, tagsApi, PlanLimitError, ApiError } from "@/lib/api";
 
 interface ContactFormProps {
   workspaceId: string;
@@ -14,8 +15,6 @@ interface ContactFormProps {
   onTagsChange?: (contactId: string, tags: TagRead[]) => void;
   onWorkspaceTagCreated?: (tag: TagRead) => void;
 }
-
-const API = process.env.NEXT_PUBLIC_API_URL;
 
 const TAG_PALETTE = [
   "#6366f1",
@@ -73,13 +72,12 @@ export default function ContactForm({
   // Fetch workspace tags on mount
   useEffect(() => {
     async function fetchTags() {
-      const token = await getAccessToken();
-      const res = await fetch(`${API}/api/v1/workspaces/${workspaceId}/tags`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data: TagRead[] = await res.json();
+      try {
+        const token = await getAccessToken();
+        const data = await tagsApi.list(token, workspaceId) as TagRead[];
         setWorkspaceTags(data);
+      } catch {
+        // silently ignore
       }
     }
     fetchTags();
@@ -101,44 +99,24 @@ export default function ContactForm({
     if (linkedinUrl.trim()) body.linkedin_url = linkedinUrl.trim();
     if (notes.trim()) body.notes = notes.trim();
 
-    const token = await getAccessToken();
-    const url = isEdit
-      ? `${API}/api/v1/workspaces/${workspaceId}/contacts/${contact!.id}`
-      : `${API}/api/v1/workspaces/${workspaceId}/contacts`;
-
-    const res = await fetch(url, {
-      method: isEdit ? "PATCH" : "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(body),
-    });
-
-    setLoading(false);
-
-    if (res.status === 402) {
-      const body = await res.json().catch(() => ({}));
-      const detail = body?.detail;
-      if (detail?.code === "plan_limit_exceeded") {
+    try {
+      const token = await getAccessToken();
+      const saved: ContactRead = isEdit
+        ? await contactsApi.update(token, workspaceId, contact!.id, body) as ContactRead
+        : await contactsApi.create(token, workspaceId, body) as ContactRead;
+      // Merge in the current contactTags since the API response may not include them
+      onSave({ ...saved, tags: contactTags });
+    } catch (e) {
+      if (e instanceof PlanLimitError) {
         setPlanLimitError(
-          `Contact limit reached (${detail.current}/${detail.limit}). Upgrade to Pro for unlimited contacts.`
+          `Contact limit reached (${e.current}/${e.limit}). Upgrade to Pro for unlimited contacts.`
         );
       } else {
-        setPlanLimitError("Contact limit reached. Upgrade to Pro.");
+        setError(e instanceof ApiError ? e.message : "Something went wrong. Please try again.");
       }
-      return;
+    } finally {
+      setLoading(false);
     }
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setError(data?.detail ?? "Something went wrong. Please try again.");
-      return;
-    }
-
-    const saved: ContactRead = await res.json();
-    // Merge in the current contactTags since the API response may not include them
-    onSave({ ...saved, tags: contactTags });
   }
 
   async function handleDelete() {
@@ -151,21 +129,14 @@ export default function ContactForm({
     setLoading(true);
     setError("");
 
-    const token = await getAccessToken();
-    const res = await fetch(
-      `${API}/api/v1/workspaces/${workspaceId}/contacts/${contact.id}`,
-      {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
-
-    setLoading(false);
-
-    if (res.ok || res.status === 204) {
+    try {
+      const token = await getAccessToken();
+      await contactsApi.remove(token, workspaceId, contact.id);
       onDelete();
-    } else {
+    } catch {
       setError("Failed to delete contact.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -196,72 +167,40 @@ export default function ContactForm({
       (t) => t.name.toLowerCase() === trimmed.toLowerCase()
     );
 
-    if (!tag) {
-      // Create it
-      const color = tagColor(trimmed);
-      const createRes = await fetch(
-        `${API}/api/v1/workspaces/${workspaceId}/tags`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ name: trimmed, color }),
-        }
-      );
-
-      if (!createRes.ok) {
-        const data = await createRes.json().catch(() => ({}));
-        setTagError(data?.detail ?? "Failed to create tag.");
-        setTagLoading(false);
-        return;
+    try {
+      if (!tag) {
+        // Create it
+        const color = tagColor(trimmed);
+        tag = await tagsApi.create(token, workspaceId, { name: trimmed, color }) as TagRead;
+        setWorkspaceTags((prev) => [...prev, tag!]);
+        onWorkspaceTagCreated?.(tag!);
       }
 
-      tag = (await createRes.json()) as TagRead;
-      setWorkspaceTags((prev) => [...prev, tag!]);
-      onWorkspaceTagCreated?.(tag!);
+      // Attach the tag to the contact
+      await tagsApi.attach(token, workspaceId, contact.id, tag.id);
+
+      const newTags = [...contactTags, tag!];
+      setContactTags(newTags);
+      onTagsChange?.(contact.id, newTags);
+      setTagInput("");
+    } catch (e) {
+      setTagError(e instanceof ApiError ? e.message : "Failed to add tag.");
+    } finally {
+      setTagLoading(false);
     }
-
-    // Attach the tag to the contact
-    const attachRes = await fetch(
-      `${API}/api/v1/workspaces/${workspaceId}/tags/contacts/${contact.id}/tags/${tag.id}`,
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
-
-    setTagLoading(false);
-
-    if (!attachRes.ok && attachRes.status !== 201) {
-      const data = await attachRes.json().catch(() => ({}));
-      setTagError(data?.detail ?? "Failed to attach tag.");
-      return;
-    }
-
-    const newTags = [...contactTags, tag!];
-    setContactTags(newTags);
-    onTagsChange?.(contact.id, newTags);
-    setTagInput("");
   }
 
   async function handleRemoveTag(tagId: string) {
     if (!contact) return;
 
-    const token = await getAccessToken();
-    const res = await fetch(
-      `${API}/api/v1/workspaces/${workspaceId}/tags/contacts/${contact.id}/tags/${tagId}`,
-      {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
-
-    if (res.ok || res.status === 204) {
+    try {
+      const token = await getAccessToken();
+      await tagsApi.detach(token, workspaceId, contact.id, tagId);
       const newTags = contactTags.filter((t) => t.id !== tagId);
       setContactTags(newTags);
       onTagsChange?.(contact.id, newTags);
+    } catch {
+      // silently ignore
     }
   }
 

@@ -1,6 +1,5 @@
 import { createClient } from "@/lib/supabase-server";
-
-const API = process.env.NEXT_PUBLIC_API_URL;
+import { adminApi } from "@/lib/api";
 
 interface AdminSubscription {
   workspace_id: string;
@@ -9,12 +8,11 @@ interface AdminSubscription {
 }
 
 async function getSubscriptions(token: string): Promise<AdminSubscription[]> {
-  const res = await fetch(`${API}/api/v1/admin/subscriptions`, {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-  });
-  if (!res.ok) return [];
-  return res.json();
+  try {
+    return await adminApi.listSubscriptions(token) as AdminSubscription[];
+  } catch {
+    return [];
+  }
 }
 
 export default async function AdminSubscriptionsPage() {

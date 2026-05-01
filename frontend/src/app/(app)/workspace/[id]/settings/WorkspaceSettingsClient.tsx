@@ -4,6 +4,7 @@ import { useState, useTransition, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase";
+import { workspacesApi, authApi, billingApi, ApiError } from "@/lib/api";
 
 interface WorkspaceRead {
   id: string;
@@ -36,8 +37,6 @@ async function getAccessToken(): Promise<string> {
   return session?.access_token ?? "";
 }
 
-const API = process.env.NEXT_PUBLIC_API_URL;
-
 export default function WorkspaceSettingsClient({
   workspace,
   members: initialMembers,
@@ -55,20 +54,12 @@ export default function WorkspaceSettingsClient({
 
   async function handleSaveName() {
     setNameError("");
-    const token = await getAccessToken();
-    const res = await fetch(`${API}/api/v1/workspaces/${workspaceId}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ name: workspaceName }),
-    });
-    if (res.ok) {
+    try {
+      const token = await getAccessToken();
+      await workspacesApi.update(token, workspaceId, { name: workspaceName });
       router.refresh();
-    } else {
-      const body = await res.json().catch(() => ({}));
-      setNameError(body?.detail ?? "Failed to save name.");
+    } catch (e) {
+      setNameError(e instanceof ApiError ? e.message : "Failed to save name.");
     }
   }
 
@@ -81,18 +72,11 @@ export default function WorkspaceSettingsClient({
 
   async function handleRotateLink() {
     setInviteError("");
-    const token = await getAccessToken();
-    const res = await fetch(
-      `${API}/api/v1/auth/invite/${workspaceId}`,
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
-    if (res.ok) {
-      const data = await res.json();
+    try {
+      const token = await getAccessToken();
+      const data = await authApi.generateInvite(token, workspaceId);
       setInviteUrl(data.invite_url);
-    } else {
+    } catch {
       setInviteError("Failed to rotate invite link.");
     }
   }
@@ -106,36 +90,24 @@ export default function WorkspaceSettingsClient({
   }
 
   async function handleRoleChange(userId: string, newRole: "admin" | "member") {
-    const token = await getAccessToken();
-    const res = await fetch(
-      `${API}/api/v1/workspaces/${workspaceId}/members/${userId}`,
-      {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ role: newRole }),
-      }
-    );
-    if (res.ok) {
+    try {
+      const token = await getAccessToken();
+      await workspacesApi.updateMember(token, workspaceId, userId, { role: newRole });
       setMembers((prev) =>
         prev.map((m) => (m.user_id === userId ? { ...m, role: newRole } : m))
       );
+    } catch {
+      // silently ignore
     }
   }
 
   async function handleRemoveMember(userId: string) {
-    const token = await getAccessToken();
-    const res = await fetch(
-      `${API}/api/v1/workspaces/${workspaceId}/members/${userId}`,
-      {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    );
-    if (res.ok) {
+    try {
+      const token = await getAccessToken();
+      await workspacesApi.removeMember(token, workspaceId, userId);
       setMembers((prev) => prev.filter((m) => m.user_id !== userId));
+    } catch {
+      // silently ignore
     }
   }
 
@@ -148,18 +120,17 @@ export default function WorkspaceSettingsClient({
 
   useEffect(() => {
     async function fetchBillingStatus() {
-      const token = await getAccessToken();
-      const res = await fetch(
-        `${API}/api/v1/billing/status/${workspaceId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (res.status === 503) {
-        setBillingNotConfigured(true);
-      } else if (res.ok) {
-        const data = await res.json();
+      try {
+        const token = await getAccessToken();
+        const data = await billingApi.getStatus(token, workspaceId);
         setBillingTier(data.tier === "pro" ? "pro" : "free");
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 503) {
+          setBillingNotConfigured(true);
+        }
+      } finally {
+        setBillingLoading(false);
       }
-      setBillingLoading(false);
     }
     fetchBillingStatus();
   }, [workspaceId]);
@@ -167,66 +138,44 @@ export default function WorkspaceSettingsClient({
   async function handleUpgrade() {
     setBillingError("");
     setBillingActionLoading(true);
-    const token = await getAccessToken();
-    const successUrl = `${window.location.origin}/dashboard?upgraded=1`;
-    const cancelUrl = window.location.href;
-    const res = await fetch(`${API}/api/v1/billing/checkout`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        workspace_id: workspaceId,
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-      }),
-    });
-    setBillingActionLoading(false);
-    if (res.status === 503) {
-      setBillingNotConfigured(true);
-      return;
-    }
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setBillingError(body?.detail ?? "Failed to start checkout. Please try again.");
-      return;
-    }
-    const data = await res.json();
-    if (data.checkout_url) {
-      window.location.href = data.checkout_url;
+    try {
+      const token = await getAccessToken();
+      const data = await billingApi.createCheckout(token, workspaceId);
+      if (data.checkout_url) {
+        window.location.href = data.checkout_url;
+      }
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 503) {
+        setBillingNotConfigured(true);
+      } else {
+        setBillingError(
+          e instanceof ApiError ? e.message : "Failed to start checkout. Please try again."
+        );
+      }
+    } finally {
+      setBillingActionLoading(false);
     }
   }
 
   async function handleManageSubscription() {
     setBillingError("");
     setBillingActionLoading(true);
-    const token = await getAccessToken();
-    const returnUrl = window.location.href;
-    const res = await fetch(`${API}/api/v1/billing/portal`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        workspace_id: workspaceId,
-        return_url: returnUrl,
-      }),
-    });
-    setBillingActionLoading(false);
-    if (res.status === 503) {
-      setBillingNotConfigured(true);
-      return;
-    }
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setBillingError(body?.detail ?? "Failed to open billing portal. Please try again.");
-      return;
-    }
-    const data = await res.json();
-    if (data.portal_url) {
-      window.location.href = data.portal_url;
+    try {
+      const token = await getAccessToken();
+      const data = await billingApi.createPortal(token, workspaceId);
+      if (data.portal_url) {
+        window.location.href = data.portal_url;
+      }
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 503) {
+        setBillingNotConfigured(true);
+      } else {
+        setBillingError(
+          e instanceof ApiError ? e.message : "Failed to open billing portal. Please try again."
+        );
+      }
+    } finally {
+      setBillingActionLoading(false);
     }
   }
 
@@ -242,14 +191,11 @@ export default function WorkspaceSettingsClient({
       return;
     }
     setDeleteError("");
-    const token = await getAccessToken();
-    const res = await fetch(`${API}/api/v1/workspaces/${workspaceId}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (res.ok || res.status === 204) {
+    try {
+      const token = await getAccessToken();
+      await workspacesApi.remove(token, workspaceId);
       router.push("/dashboard");
-    } else {
+    } catch {
       setDeleteError("Failed to delete workspace.");
     }
   }

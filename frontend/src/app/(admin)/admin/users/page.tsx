@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase-server";
 import UsersClient from "./UsersClient";
-
-const API = process.env.NEXT_PUBLIC_API_URL;
+import { adminApi } from "@/lib/api";
 
 export interface AdminUser {
   id: string;
@@ -13,12 +12,11 @@ export interface AdminUser {
 }
 
 async function getUsers(token: string): Promise<AdminUser[]> {
-  const res = await fetch(`${API}/api/v1/admin/users`, {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-  });
-  if (!res.ok) return [];
-  return res.json();
+  try {
+    return await adminApi.listUsers(token) as AdminUser[];
+  } catch {
+    return [];
+  }
 }
 
 export default async function AdminUsersPage() {

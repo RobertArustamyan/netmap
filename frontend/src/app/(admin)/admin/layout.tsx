@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
-
-const API = process.env.NEXT_PUBLIC_API_URL;
+import { adminApi, ApiError } from "@/lib/api";
 
 const navLinks = [
   { href: "/admin/users", label: "Users" },
@@ -22,13 +21,12 @@ export default async function AdminLayout({
   if (!user) redirect("/login");
 
   // Guard: verify superadmin access by calling any admin endpoint
-  const guardRes = await fetch(`${API}/api/v1/admin/users`, {
-    headers: { Authorization: `Bearer ${session?.access_token ?? ""}` },
-    cache: "no-store",
-  });
-
-  if (guardRes.status === 403 || guardRes.status === 401) {
-    redirect("/dashboard");
+  try {
+    await adminApi.listUsers(session?.access_token ?? "");
+  } catch (e) {
+    if (e instanceof ApiError && (e.status === 403 || e.status === 401)) {
+      redirect("/dashboard");
+    }
   }
 
   return (

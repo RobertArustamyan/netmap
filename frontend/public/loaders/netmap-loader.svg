@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="80" height="80">
+  
+  <g class="root">
+    <line class="edge" x1="20" y1="22" x2="60" y2="22"></line>
+    <line class="edge e2" x1="20" y1="22" x2="40" y2="60"></line>
+    <line class="edge e3" x1="60" y1="22" x2="40" y2="60"></line>
+    <circle class="node" cx="20" cy="22" r="6" fill="#4f46e5"></circle>
+    <circle class="node n2" cx="60" cy="22" r="6" fill="#ffffff" stroke="#4f46e5" stroke-width="2"></circle>
+    <circle class="node n3" cx="40" cy="60" r="6" fill="#ffffff" stroke="#4f46e5" stroke-width="2"></circle>
+  </g>
+</svg>

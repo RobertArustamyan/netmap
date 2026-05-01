@@ -1,6 +1,5 @@
 import { createClient } from "@/lib/supabase-server";
-
-const API = process.env.NEXT_PUBLIC_API_URL;
+import { adminApi, ApiError } from "@/lib/api";
 
 interface RecentUser {
   email: string;
@@ -22,18 +21,14 @@ interface AdminStats {
 async function getStats(
   token: string
 ): Promise<{ stats: AdminStats | null; error: string | null }> {
-  const res = await fetch(`${API}/api/v1/admin/stats`, {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    return {
-      stats: null,
-      error: `API error ${res.status}: ${body?.detail ?? "unknown"}`,
-    };
+  try {
+    const stats = await adminApi.getStats(token) as AdminStats;
+    return { stats, error: null };
+  } catch (e) {
+    const status = e instanceof ApiError ? e.status : "?";
+    const message = e instanceof ApiError ? e.message : "unknown";
+    return { stats: null, error: `API error ${status}: ${message}` };
   }
-  return { stats: await res.json(), error: null };
 }
 
 function relativeTime(iso: string): string {

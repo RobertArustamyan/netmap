@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase-server";
 import WorkspacesClient from "./WorkspacesClient";
-
-const API = process.env.NEXT_PUBLIC_API_URL;
+import { adminApi, ApiError } from "@/lib/api";
 
 export interface AdminWorkspace {
   id: string;
@@ -17,18 +16,14 @@ export interface AdminWorkspace {
 async function getWorkspaces(
   token: string
 ): Promise<{ workspaces: AdminWorkspace[]; error: string | null }> {
-  const res = await fetch(`${API}/api/v1/admin/workspaces`, {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    return {
-      workspaces: [],
-      error: `API error ${res.status}: ${body?.detail ?? "unknown"}`,
-    };
+  try {
+    const workspaces = await adminApi.listWorkspaces(token) as AdminWorkspace[];
+    return { workspaces, error: null };
+  } catch (e) {
+    const status = e instanceof ApiError ? e.status : "?";
+    const message = e instanceof ApiError ? e.message : "unknown";
+    return { workspaces: [], error: `API error ${status}: ${message}` };
   }
-  return { workspaces: await res.json(), error: null };
 }
 
 export default async function AdminWorkspacesPage() {

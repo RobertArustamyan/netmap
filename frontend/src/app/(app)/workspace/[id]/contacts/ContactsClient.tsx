@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import ContactForm from "./ContactForm";
 import CSVImportModal from "./CSVImportModal";
 import { createClient } from "@/lib/supabase";
+import { tagsApi, contactsApi } from "@/lib/api";
 
 export interface TagRead {
   id: string;
@@ -33,8 +34,6 @@ interface Props {
   initialContacts: ContactRead[];
 }
 
-const API = process.env.NEXT_PUBLIC_API_URL;
-
 async function getAccessToken(): Promise<string> {
   const supabase = createClient();
   const {
@@ -55,13 +54,12 @@ export default function ContactsClient({ workspaceId, initialContacts }: Props) 
   // Fetch workspace tags once on mount
   useEffect(() => {
     async function fetchTags() {
-      const token = await getAccessToken();
-      const res = await fetch(`${API}/api/v1/workspaces/${workspaceId}/tags`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data: TagRead[] = await res.json();
+      try {
+        const token = await getAccessToken();
+        const data = await tagsApi.list(token, workspaceId) as TagRead[];
         setWorkspaceTags(data);
+      } catch {
+        // silently ignore
       }
     }
     fetchTags();
@@ -151,14 +149,12 @@ export default function ContactsClient({ workspaceId, initialContacts }: Props) 
   async function handleImportClose(didImport: boolean) {
     setImportModalOpen(false);
     if (didImport) {
-      const token = await getAccessToken();
-      const res = await fetch(
-        `${API}/api/v1/workspaces/${workspaceId}/contacts`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (res.ok) {
-        const data: ContactRead[] = await res.json();
+      try {
+        const token = await getAccessToken();
+        const data = await contactsApi.list(token, workspaceId) as ContactRead[];
         setContacts(data);
+      } catch {
+        // silently ignore
       }
     }
   }

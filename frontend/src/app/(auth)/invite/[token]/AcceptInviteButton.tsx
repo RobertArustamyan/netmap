@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
+import { authApi, PlanLimitError, ApiError } from "@/lib/api";
 
 interface Props {
   token: string;
@@ -26,35 +27,19 @@ export default function AcceptInviteButton({ token, workspaceName }: Props) {
       return;
     }
 
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/api/v1/auth/accept-invite/${token}`,
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${session.access_token}` },
+    try {
+      const data = await authApi.acceptInvite(session.access_token, token);
+      router.push(`/workspace/${data.workspace_id}/graph`);
+    } catch (e) {
+      if (e instanceof PlanLimitError) {
+        setError(
+          `This workspace has reached its member limit (${e.current}/${e.limit}). The owner needs to upgrade to Pro.`
+        );
+      } else {
+        setError(e instanceof ApiError ? e.message : "Something went wrong");
       }
-    );
-
-    if (res.status === 402) {
-      const body = await res.json().catch(() => ({}));
-      const detail = body?.detail;
-      setError(
-        detail?.code === "plan_limit_exceeded"
-          ? `This workspace has reached its member limit (${detail.current}/${detail.limit}). The owner needs to upgrade to Pro.`
-          : "This workspace has reached its member limit."
-      );
       setLoading(false);
-      return;
     }
-
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.detail ?? "Something went wrong");
-      setLoading(false);
-      return;
-    }
-
-    const data = await res.json();
-    router.push(`/workspace/${data.workspace_id}/graph`);
   }
 
   return (

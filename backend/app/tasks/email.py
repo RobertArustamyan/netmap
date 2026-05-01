@@ -2,6 +2,7 @@
 Email sending via Resend (https://resend.com).
 All functions are fire-and-forget — failures are logged, never raised.
 """
+import asyncio
 import logging
 
 import httpx
@@ -106,20 +107,90 @@ def _divider() -> str:
 
 # ── Email functions ────────────────────────────────────────────────────────────
 
+_MAX_ATTEMPTS = 3
+_BACKOFF_BASE = 1  # seconds: 1, 2, 4
+
+
+async def _send_with_retry(
+    client: httpx.AsyncClient,
+    payload: dict,
+    to: str,
+    subject: str,
+) -> None:
+    """
+    POST to Resend with exponential backoff.
+
+    Retries on:  network errors, httpx.TimeoutException, HTTP 429, HTTP 5xx.
+    No retry on: HTTP 4xx (except 429) — these are permanent failures.
+
+    After all attempts are exhausted the error is logged and the function
+    returns silently, preserving the fire-and-forget contract.
+    """
+    last_status: int | None = None
+    last_body: str = ""
+
+    for attempt in range(1, _MAX_ATTEMPTS + 1):
+        try:
+            resp = await client.post(
+                _RESEND_URL,
+                headers={"Authorization": f"Bearer {settings.resend_api_key}"},
+                json=payload,
+            )
+
+            if resp.status_code < 400:
+                # Success
+                return
+
+            last_status = resp.status_code
+            last_body = resp.text
+
+            # Permanent 4xx failure (except 429) — do not retry
+            if resp.status_code != 429 and 400 <= resp.status_code < 500:
+                logger.error(
+                    "Permanent failure sending email to %s (subject: %s) — "
+                    "status %d, body: %s",
+                    to, subject, last_status, last_body,
+                )
+                return
+
+            # Transient: 429 or 5xx — fall through to retry logic below
+            logger.warning(
+                "Transient failure sending email to %s (subject: %s), attempt %d/%d — "
+                "status %d, body: %s",
+                to, subject, attempt, _MAX_ATTEMPTS, last_status, last_body,
+            )
+
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            last_body = str(exc)
+            logger.warning(
+                "Network/timeout error sending email to %s (subject: %s), attempt %d/%d — %s",
+                to, subject, attempt, _MAX_ATTEMPTS, exc,
+            )
+
+        # If this was the last attempt, stop — don't sleep needlessly
+        if attempt == _MAX_ATTEMPTS:
+            break
+
+        wait = _BACKOFF_BASE * (2 ** (attempt - 1))  # 1s, 2s, 4s
+        await asyncio.sleep(wait)
+
+    logger.error(
+        "All %d attempts exhausted sending email to %s (subject: %s) — "
+        "last status: %s, last body: %s",
+        _MAX_ATTEMPTS, to, subject, last_status, last_body,
+    )
+
+
 async def _send(to: str, subject: str, html: str) -> None:
     if not settings.resend_api_key:
         logger.warning("RESEND_API_KEY not set — skipping email to %s", to)
         return
+    payload = {"from": _from_address(), "to": [to], "subject": subject, "html": html}
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(
-                _RESEND_URL,
-                headers={"Authorization": f"Bearer {settings.resend_api_key}"},
-                json={"from": _from_address(), "to": [to], "subject": subject, "html": html},
-            )
-            resp.raise_for_status()
+            await _send_with_retry(client, payload, to, subject)
     except Exception:
-        logger.exception("Failed to send email to %s (subject: %s)", to, subject)
+        logger.exception("Unexpected error sending email to %s (subject: %s)", to, subject)
 
 
 async def send_welcome_email(to_email: str) -> None:

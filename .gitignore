@@ -19,6 +19,11 @@ out/
 frontend/.next/
 frontend/node_modules/
 
+# Playwright
+frontend/e2e/.auth/
+frontend/playwright-report/
+frontend/test-results/
+
 # IDE
 .idea/
 .vscode/

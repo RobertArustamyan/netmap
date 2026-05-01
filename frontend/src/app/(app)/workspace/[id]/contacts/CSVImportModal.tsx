@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase";
+import { contactsApi, PlanLimitError, ApiError } from "@/lib/api";
 
 interface ImportResult {
   imported: number;
@@ -14,8 +15,6 @@ interface Props {
   workspaceId: string;
   onClose: (didImport: boolean) => void;
 }
-
-const API = process.env.NEXT_PUBLIC_API_URL;
 
 async function getAccessToken(): Promise<string> {
   const supabase = createClient();
@@ -48,43 +47,24 @@ export default function CSVImportModal({ workspaceId, onClose }: Props) {
     setError("");
     setResult(null);
 
-    const token = await getAccessToken();
-    const formData = new FormData();
-    formData.append("file", file);
-
-    const res = await fetch(
-      `${API}/api/v1/workspaces/${workspaceId}/contacts/import`,
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      }
-    );
-
-    setLoading(false);
-
-    if (res.status === 402) {
-      const data = await res.json().catch(() => ({}));
-      const detail = data?.detail;
-      setPlanLimitError(true);
-      if (detail?.code === "plan_limit_exceeded") {
+    try {
+      const token = await getAccessToken();
+      const data = await contactsApi.importCsv(token, workspaceId, file);
+      setResult(data);
+    } catch (e) {
+      if (e instanceof PlanLimitError) {
+        setPlanLimitError(true);
         setError(
-          `Contact limit reached (${detail.current}/${detail.limit}). Upgrade to Pro for unlimited contacts.`
+          `Contact limit reached (${e.current}/${e.limit}). Upgrade to Pro for unlimited contacts.`
         );
       } else {
-        setError("Contact limit reached. Upgrade to Pro for unlimited contacts.");
+        setError(
+          e instanceof ApiError ? e.message : "Import failed. Please check your file and try again."
+        );
       }
-      return;
+    } finally {
+      setLoading(false);
     }
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setError(data?.detail ?? "Import failed. Please check your file and try again.");
-      return;
-    }
-
-    const data: ImportResult = await res.json();
-    setResult(data);
   }
 
   function handleClose() {

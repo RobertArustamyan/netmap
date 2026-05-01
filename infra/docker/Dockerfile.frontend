@@ -1,2 +1,66 @@
-# Frontend Dockerfile — Next.js
+# Frontend Dockerfile — Next.js 15 App Router
 # Stages: deps → builder → runner (standalone output)
+# Build context must be the repo root.
+#
+# IMPORTANT: Next.js standalone output must be enabled in next.config.mjs:
+#   const nextConfig = { output: 'standalone', ... }
+# Without this the runner stage will have nothing to copy.
+
+# ---------------------------------------------------------------------------
+# Stage 1: deps — install node_modules (cached separately from source)
+# ---------------------------------------------------------------------------
+FROM node:20-alpine AS deps
+
+WORKDIR /app
+
+# Copy manifests only; this layer is rebuilt only when deps change
+COPY frontend/package.json frontend/package-lock.json ./
+
+# ci is faster and reproducible; omit devDependencies is handled by Next build
+RUN npm ci
+
+# ---------------------------------------------------------------------------
+# Stage 2: builder — compile the Next.js app
+# ---------------------------------------------------------------------------
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Bring in installed node_modules from the deps stage
+COPY --from=deps /app/node_modules ./node_modules
+
+# Copy full frontend source (node_modules already present, won't be re-copied
+# from host — .dockerignore should exclude host node_modules)
+COPY frontend/ .
+
+# Disable telemetry during build; never bake real secrets here — use build args
+# only for non-sensitive config (e.g. public NEXT_PUBLIC_* vars)
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN npm run build
+
+# ---------------------------------------------------------------------------
+# Stage 3: runner — minimal runtime image using standalone output
+# ---------------------------------------------------------------------------
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Run as a non-root user
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+
+# Standalone output bundles only the files needed to run the server.
+# static/ and public/ must be copied alongside it.
+COPY --from=builder --chown=appuser:appgroup /app/.next/standalone ./
+COPY --from=builder --chown=appuser:appgroup /app/.next/static ./.next/static
+COPY --from=builder --chown=appuser:appgroup /app/public ./public
+
+USER appuser
+
+EXPOSE 3000
+
+# server.js is emitted by Next.js standalone output
+CMD ["node", "server.js"]

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
+import { workspacesApi, ApiError } from "@/lib/api";
 
 export default function NewWorkspacePage() {
   const router = useRouter();
@@ -23,24 +24,13 @@ export default function NewWorkspacePage() {
       return;
     }
 
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/workspaces`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({ name }),
-    });
-
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.detail ?? "Failed to create workspace");
+    try {
+      const workspace = await workspacesApi.create(session.access_token, { name });
+      router.push(`/workspace/${workspace.id}/graph`);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Failed to create workspace");
       setLoading(false);
-      return;
     }
-
-    const workspace = await res.json();
-    router.push(`/workspace/${workspace.id}/graph`);
   }
 
   return (

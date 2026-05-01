@@ -1,14 +1,14 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
+import { workspacesApi } from "@/lib/api";
 
 async function getWorkspaces(accessToken: string) {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/workspaces`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-    cache: "no-store",
-  });
-  if (!res.ok) return [];
-  return res.json();
+  try {
+    return await workspacesApi.list(accessToken);
+  } catch {
+    return [];
+  }
 }
 
 export default async function DashboardPage() {

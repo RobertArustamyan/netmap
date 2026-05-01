@@ -20,6 +20,7 @@ import ReactFlow, {
 } from "reactflow";
 import "reactflow/dist/style.css";
 import { createClient } from "@/lib/supabase";
+import { contactsApi, edgesApi, pathsApi } from "@/lib/api";
 
 // ─── API types ───────────────────────────────────────────────────────────────
 
@@ -56,8 +57,6 @@ interface PathResult {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 async function getAccessToken(): Promise<string> {
   const supabase = createClient();
@@ -189,14 +188,13 @@ function InnerGraph({
 
       try {
         const token = await getAccessToken();
-        const url = `${API}/api/v1/workspaces/${workspaceId}/paths?from_contact_id=${pathFrom}&to_contact_id=${pathTo}`;
-        const res = await fetch(url, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const result: PathResult = await pathsApi.find(
+          token,
+          workspaceId,
+          pathFrom!,
+          pathTo!,
+        ) as PathResult;
 
-        if (!res.ok || cancelled) return;
-
-        const result: PathResult = await res.json();
         if (cancelled) return;
 
         setPathResult(result);
@@ -322,24 +320,10 @@ function InnerGraph({
 
       try {
         const token = await getAccessToken();
-        const res = await fetch(
-          `${API}/api/v1/workspaces/${workspaceId}/edges`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              source_contact_id: connection.source,
-              target_contact_id: connection.target,
-            }),
-          }
-        );
-
-        if (!res.ok) return;
-
-        const created: EdgeRead = await res.json();
+        const created: EdgeRead = await edgesApi.create(token, workspaceId, {
+          source_contact_id: connection.source,
+          target_contact_id: connection.target,
+        }) as EdgeRead;
         const newRFEdge: RFEdge = {
           id: created.id,
           source: created.source_contact_id,
@@ -408,19 +392,10 @@ function InnerGraph({
 
     try {
       const token = await getAccessToken();
-      const res = await fetch(
-        `${API}/api/v1/workspaces/${workspaceId}/edges/${selectedEdgeId}`,
-        {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-
-      if (res.ok || res.status === 204) {
-        setEdges((prev) => prev.filter((e) => e.id !== selectedEdgeId));
-        onEdgeDeleted(selectedEdgeId);
-        setSelectedEdgeId(null);
-      }
+      await edgesApi.remove(token, workspaceId, selectedEdgeId);
+      setEdges((prev) => prev.filter((e) => e.id !== selectedEdgeId));
+      onEdgeDeleted(selectedEdgeId);
+      setSelectedEdgeId(null);
     } catch {
       // silently ignore
     }
@@ -655,20 +630,11 @@ export default function GraphClient({ workspaceId }: GraphClientProps) {
 
       try {
         const token = await getAccessToken();
-        const headers = { Authorization: `Bearer ${token}` };
 
-        const [contactsRes, edgesRes] = await Promise.all([
-          fetch(`${API}/api/v1/workspaces/${workspaceId}/contacts`, {
-            headers,
-          }),
-          fetch(`${API}/api/v1/workspaces/${workspaceId}/edges`, { headers }),
+        const [contactsData, edgesData] = await Promise.all([
+          contactsApi.list(token, workspaceId) as Promise<ContactRead[]>,
+          edgesApi.list(token, workspaceId) as Promise<EdgeRead[]>,
         ]);
-
-        if (!contactsRes.ok) throw new Error("Failed to load contacts.");
-        if (!edgesRes.ok) throw new Error("Failed to load relationships.");
-
-        const contactsData: ContactRead[] = await contactsRes.json();
-        const edgesData: EdgeRead[] = await edgesRes.json();
 
         if (cancelled) return;
 

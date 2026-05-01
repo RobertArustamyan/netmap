@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase";
 import type { AdminUser } from "./page";
-
-const API = process.env.NEXT_PUBLIC_API_URL;
+import { adminApi, ApiError } from "@/lib/api";
 
 async function getAccessToken(): Promise<string> {
   const supabase = createClient();
@@ -27,19 +26,11 @@ export default function UsersClient({ initialUsers }: Props) {
     setError(null);
     try {
       const token = await getAccessToken();
-      const res = await fetch(`${API}/api/v1/admin/users/${userId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok || res.status === 204) {
-        setUsers((prev) => prev.filter((u) => u.id !== userId));
-        setConfirmingId(null);
-      } else {
-        const body = await res.json().catch(() => ({}));
-        setError(body?.detail ?? "Failed to delete user.");
-      }
-    } catch {
-      setError("Network error. Please try again.");
+      await adminApi.deleteUser(token, userId);
+      setUsers((prev) => prev.filter((u) => u.id !== userId));
+      setConfirmingId(null);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Network error. Please try again.");
     } finally {
       setDeletingId(null);
     }

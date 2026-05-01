@@ -1,0 +1,49 @@
+# .dockerignore — applied at repo root (build context for both Dockerfiles)
+# Keeps images lean and prevents accidental secret leakage.
+
+# Python artefacts
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.coverage
+**/htmlcov/
+**/*.egg-info/
+
+# Virtual environments
+**/.venv/
+**/venv/
+**/env/
+
+# Secrets — never bake into images
+**/.env
+**/.env.*
+!**/.env.example   # allow example files through (they contain no real secrets)
+
+# Node artefacts
+**/node_modules/
+**/.next/
+**/out/
+**/.turbo/
+
+# OS / editor noise
+**/.DS_Store
+**/*.swp
+**/.idea/
+**/.vscode/
+
+# Git history (not needed in image)
+.git/
+.github/
+
+# Dev-only directories
+memory/
+agents/
+
+# Test outputs
+**/coverage.xml
+**/test-results/
+**/playwright-report/
