@@ -1,305 +1,884 @@
+"use client";
+
 import Link from "next/link";
+import { useState } from "react";
 
-const FREE_FEATURES = [
-  { label: "Up to 5 members", included: true },
-  { label: "Up to 100 contacts", included: true },
-  { label: "Up to 200 relationships", included: true },
-  { label: "Tags & categories", included: true },
-  { label: "Graph canvas", included: true },
-  { label: "Search & filter", included: true },
-  { label: "Second-degree paths", included: false },
-  { label: "CSV import", included: false },
-  { label: "Email notifications", included: false },
-  { label: "Priority support", included: false },
-];
+// ── Design tokens ─────────────────────────────────────────────────────────────
+const bg = "#faf8f3";
+const ink = "#0f172a";
+const accent = "#4f46e5";
+const muted = "#64748b";
+const rule = "#e7e2d4";
+const serifStyle: React.CSSProperties = {
+  fontFamily: "var(--font-serif)",
+  fontStyle: "italic",
+  fontWeight: 400,
+  letterSpacing: "-0.01em",
+};
 
-const PRO_FEATURES = [
-  { label: "Unlimited members", included: true },
-  { label: "Unlimited contacts", included: true },
-  { label: "Unlimited relationships", included: true },
-  { label: "Tags & categories", included: true },
-  { label: "Graph canvas", included: true },
-  { label: "Search & filter", included: true },
-  { label: "Second-degree paths", included: true },
-  { label: "CSV import", included: true },
-  { label: "Email notifications", included: true },
-  { label: "Priority support", included: true },
-];
+// ── Logo ──────────────────────────────────────────────────────────────────────
+function Logo() {
+  return (
+    <Link
+      href="/"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        textDecoration: "none",
+        color: ink,
+      }}
+    >
+      <svg width="26" height="26" viewBox="0 0 32 32" fill="none">
+        <line x1="9" y1="9" x2="23" y2="9" stroke="#94a3b8" strokeWidth="1.75" strokeLinecap="round" />
+        <line x1="9" y1="9" x2="16" y2="23" stroke="#94a3b8" strokeWidth="1.75" strokeLinecap="round" />
+        <line x1="23" y1="9" x2="16" y2="23" stroke="#94a3b8" strokeWidth="1.75" strokeLinecap="round" />
+        <circle cx="9" cy="9" r="4.25" fill="#4f46e5" />
+        <circle cx="23" cy="9" r="4.25" fill="#ffffff" stroke="#0f172a" strokeWidth="1.75" />
+        <circle cx="16" cy="23" r="4.25" fill="#ffffff" stroke="#0f172a" strokeWidth="1.75" />
+      </svg>
+      <span style={{ fontSize: 16, fontWeight: 600, letterSpacing: "-0.01em" }}>NetMap</span>
+    </Link>
+  );
+}
 
-const ALL_FEATURES = [
-  { label: "Members", free: "Up to 5", pro: "Unlimited" },
-  { label: "Contacts", free: "Up to 100", pro: "Unlimited" },
-  { label: "Relationships", free: "Up to 200", pro: "Unlimited" },
-  { label: "Tags & categories", free: true, pro: true },
-  { label: "Graph canvas", free: true, pro: true },
-  { label: "Search & filter", free: true, pro: true },
-  { label: "Second-degree paths", free: false, pro: true },
-  { label: "CSV import", free: false, pro: true },
-  { label: "Email notifications", free: false, pro: true },
-  { label: "Priority support", free: false, pro: true },
-];
-
-const FAQS = [
-  {
-    q: "Can I switch plans?",
-    a: "Yes. You can upgrade or downgrade your workspace plan at any time. Changes take effect immediately and billing is prorated.",
-  },
-  {
-    q: "What counts as a contact?",
-    a: "Any person node you add to your workspace graph — whether imported via CSV or created manually.",
-  },
-  {
-    q: "Is there a free trial for Pro?",
-    a: "Yes. Every new workspace gets a 14-day Pro trial with no credit card required. You'll only be charged if you choose to continue.",
-  },
-  {
-    q: "What happens if I exceed the free limits?",
-    a: "You'll be prompted to upgrade when you hit a limit. Your existing data is never deleted — we just pause new additions until you upgrade or free up space.",
-  },
-];
-
-function Check({ className }: { className?: string }) {
+// ── Check SVG for feature lists ───────────────────────────────────────────────
+function CheckIcon({ featured }: { featured?: boolean }) {
   return (
     <svg
-      className={className}
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 20 20"
-      fill="currentColor"
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
       aria-hidden="true"
+      style={{ flexShrink: 0 }}
     >
-      <path
-        fillRule="evenodd"
-        d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z"
-        clipRule="evenodd"
+      <polyline
+        points="3,8 7,12 13,4"
+        stroke={featured ? "#c7d2fe" : "#16a34a"}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </svg>
   );
 }
 
-function Dash({ className }: { className?: string }) {
+// ── Check SVG for comparison table ───────────────────────────────────────────
+function TableCheck() {
   return (
     <svg
-      className={className}
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 20 20"
-      fill="currentColor"
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
       aria-hidden="true"
+      style={{ margin: "0 auto", display: "block" }}
     >
-      <path
-        fillRule="evenodd"
-        d="M4 10a.75.75 0 01.75-.75h10.5a.75.75 0 010 1.5H4.75A.75.75 0 014 10z"
-        clipRule="evenodd"
+      <polyline
+        points="3,8 7,12 13,4"
+        stroke="#16a34a"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </svg>
   );
 }
 
-function FeatureRow({
-  label,
-  included,
-  onDark,
-}: {
-  label: string;
-  included: boolean;
-  onDark?: boolean;
-}) {
+// ── Plan data ─────────────────────────────────────────────────────────────────
+type Billing = "monthly" | "yearly";
+
+const plans = [
+  {
+    name: "FREE",
+    tagline: "For small teams getting started.",
+    price: { monthly: 0, yearly: 0 },
+    unit: "forever",
+    cta: "Start free",
+    href: "/signup",
+    featured: false,
+    badge: null,
+    features: [
+      "Up to 5 teammates",
+      "Up to 100 contacts per workspace",
+      "Up to 200 relationships",
+      "Tags & categories",
+      "Interactive graph canvas",
+      "Search & filter",
+      "2-hop warm paths",
+    ],
+  },
+  {
+    name: "PRO",
+    tagline: "For teams working their network seriously.",
+    price: { monthly: 29, yearly: 24 },
+    unit: "per workspace, per month",
+    cta: "Start 14-day trial",
+    href: "/signup",
+    featured: true,
+    badge: "Most popular",
+    features: [
+      "Unlimited teammates",
+      "Unlimited contacts",
+      "Unlimited relationships",
+      "6-hop path-finder",
+      "CSV + LinkedIn import",
+      "Edge strength scoring",
+      "Saved filters & smart lists",
+      "Email notifications",
+      "CSV export",
+      "Priority support",
+    ],
+  },
+  {
+    name: "TEAM",
+    tagline: "For larger orgs that need security & control.",
+    price: { monthly: 12, yearly: 10 },
+    unit: "per seat, per month",
+    cta: "Contact sales",
+    href: "mailto:hello@netmap.app",
+    featured: false,
+    badge: null,
+    features: [
+      "Everything in Pro",
+      "SSO / SAML",
+      "SCIM provisioning",
+      "Role-based permissions",
+      "Audit logs",
+      "Self-host option",
+      "Dedicated CSM",
+      "Custom data residency",
+      "SLA & onboarding",
+    ],
+  },
+];
+
+// ── Comparison table data ─────────────────────────────────────────────────────
+const comparisonRows: [string, boolean | string, boolean | string, boolean | string][] = [
+  ["Teammates", "5", "Unlimited", "Unlimited"],
+  ["Contacts per workspace", "100", "Unlimited", "Unlimited"],
+  ["Relationships", "200", "Unlimited", "Unlimited"],
+  ["Tags & categories", true, true, true],
+  ["Search & filter", true, true, true],
+  ["Graph canvas (10k nodes)", true, true, true],
+  ["Warm path-finder", "2 hops", "6 hops", "6 hops"],
+  ["Edge strength scoring", false, true, true],
+  ["CSV import", false, true, true],
+  ["LinkedIn import", false, true, true],
+  ["CSV export", false, true, true],
+  ["Saved filters", false, true, true],
+  ["Email notifications", false, true, true],
+  ["SSO / SAML", false, false, true],
+  ["SCIM provisioning", false, false, true],
+  ["Audit logs", false, false, true],
+  ["Self-host option", false, false, true],
+  ["Custom data residency", false, false, true],
+  ["Support", "Community", "Priority", "Dedicated CSM"],
+];
+
+// ── FAQ data ──────────────────────────────────────────────────────────────────
+const faqs = [
+  {
+    q: "Who owns the contacts?",
+    a: "You do. Every contact belongs to the teammate who added it. Leave the workspace, and your contacts come with you. We never sell, share, or train models on your data.",
+  },
+  {
+    q: "Can I import from LinkedIn?",
+    a: "Yes — Pro and Team support LinkedIn export uploads, CSV imports, and a manual editor. Auto-dedupe and auto-tagging happen on the fly.",
+  },
+  {
+    q: "How does the path-finder work?",
+    a: "NetMap runs a weighted breadth-first search across your team's graph. It finds the shortest chain to any target, ranked by relationship strength.",
+  },
+  {
+    q: "Is there a free trial?",
+    a: "The Free plan is free forever (no card required). Pro starts with a 14-day trial — also no card.",
+  },
+  {
+    q: "Can I self-host?",
+    a: "Yes, on the Team plan. We ship a Docker image and a Helm chart. SOC 2 audit is in progress; full report Q3 2026.",
+  },
+  {
+    q: "What happens when I cancel?",
+    a: "You can export your full graph as JSON or CSV at any time. After cancellation, your workspace is read-only for 30 days, then deleted.",
+  },
+];
+
+// ── TableCell ─────────────────────────────────────────────────────────────────
+function TableCell({ value }: { value: boolean | string }) {
+  if (value === true) return <TableCheck />;
+  if (value === false) {
+    return (
+      <span style={{ display: "block", textAlign: "center", color: "#cbd5e1" }}>—</span>
+    );
+  }
   return (
-    <li className="flex items-center gap-3 text-sm">
-      {included ? (
-        <Check
-          className={`h-4 w-4 flex-shrink-0 ${onDark ? "text-indigo-200" : "text-green-500"}`}
-        />
-      ) : (
-        <Dash
-          className={`h-4 w-4 flex-shrink-0 ${onDark ? "text-indigo-300/50" : "text-gray-300"}`}
-        />
-      )}
-      <span className={included ? "" : onDark ? "text-indigo-200/60" : "text-gray-400"}>
-        {label}
-      </span>
-    </li>
+    <span
+      style={{
+        display: "block",
+        textAlign: "center",
+        fontSize: 13,
+        fontWeight: 500,
+        color: ink,
+      }}
+    >
+      {value}
+    </span>
   );
 }
 
-function TableCell({
-  value,
-}: {
-  value: boolean | string;
-}) {
-  if (typeof value === "string") {
-    return <span className="text-sm text-gray-700">{value}</span>;
-  }
-  if (value) {
-    return <Check className="h-5 w-5 text-green-500 mx-auto" />;
-  }
-  return <Dash className="h-5 w-5 text-gray-300 mx-auto" />;
-}
-
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function PricingPage() {
+  const [billing, setBilling] = useState<Billing>("monthly");
+
   return (
-    <main className="min-h-screen bg-white">
-      {/* Nav back link */}
-      <div className="px-6 pt-8 max-w-5xl mx-auto">
-        <Link
-          href="/"
-          className="text-sm font-medium text-indigo-600 hover:text-indigo-700 transition-colors"
-        >
-          ← NetMap
-        </Link>
-      </div>
-
-      {/* Header */}
-      <section className="px-6 py-20 max-w-5xl mx-auto text-center">
-        <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">
-          Simple, transparent pricing
-        </h1>
-        <p className="mt-4 text-lg text-gray-500">
-          Start free. Upgrade when your network grows.
-        </p>
-      </section>
-
-      {/* Pricing cards */}
-      <section className="px-6 pb-20 max-w-5xl mx-auto">
-        <div className="grid gap-8 md:grid-cols-2 md:items-start">
-          {/* Free card */}
-          <div className="rounded-2xl p-8 shadow-sm border border-gray-200 bg-white flex flex-col">
-            <div className="mb-6">
-              <p className="text-sm font-semibold uppercase tracking-wide text-gray-500">
-                Free
-              </p>
-              <div className="mt-2 flex items-baseline gap-1">
-                <span className="text-5xl font-bold text-gray-900">$0</span>
-                <span className="text-gray-500 text-sm">/ month</span>
-              </div>
-              <p className="mt-1 text-sm text-gray-400">Free forever. No credit card needed.</p>
-            </div>
-
-            <ul className="space-y-3 flex-1 mb-8">
-              {FREE_FEATURES.map((f) => (
-                <FeatureRow key={f.label} label={f.label} included={f.included} />
-              ))}
-            </ul>
-
-            <Link
-              href="/signup"
-              className="block w-full rounded-lg border border-indigo-600 px-5 py-2.5 text-center text-sm font-semibold text-indigo-600 hover:bg-indigo-50 transition-colors"
-            >
-              Get started free
-            </Link>
-          </div>
-
-          {/* Pro card */}
-          <div className="rounded-2xl p-8 shadow-sm bg-indigo-600 text-white flex flex-col relative">
-            {/* Badge */}
-            <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 rounded-full bg-indigo-900 px-4 py-1 text-xs font-semibold tracking-wide text-indigo-100">
-              Most popular
-            </span>
-
-            <div className="mb-6">
-              <p className="text-sm font-semibold uppercase tracking-wide text-indigo-200">
-                Pro
-              </p>
-              <div className="mt-2 flex items-baseline gap-1">
-                <span className="text-5xl font-bold text-white">$29</span>
-                <span className="text-indigo-200 text-sm">/ month per workspace</span>
-              </div>
-              <p className="mt-1 text-sm text-indigo-300">14-day free trial. No credit card required.</p>
-            </div>
-
-            <ul className="space-y-3 flex-1 mb-8">
-              {PRO_FEATURES.map((f) => (
-                <FeatureRow key={f.label} label={f.label} included={f.included} onDark />
-              ))}
-            </ul>
-
-            <Link
-              href="/signup"
-              className="block w-full rounded-lg bg-white px-5 py-2.5 text-center text-sm font-semibold text-indigo-600 hover:bg-indigo-50 transition-colors"
-            >
-              Start free trial
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* Feature comparison table — desktop only */}
-      <section className="px-6 pb-20 max-w-5xl mx-auto hidden md:block">
-        <h2 className="text-xl font-semibold text-gray-900 mb-6 text-center">
-          Full feature comparison
-        </h2>
-        <div className="overflow-hidden rounded-2xl border border-gray-200 shadow-sm">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="py-4 px-6 text-sm font-semibold text-gray-700 w-1/2">
-                  Feature
-                </th>
-                <th className="py-4 px-6 text-sm font-semibold text-gray-700 text-center w-1/4">
-                  Free
-                </th>
-                <th className="py-4 px-6 text-sm font-semibold text-indigo-600 text-center w-1/4">
-                  Pro
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {ALL_FEATURES.map((feature, i) => (
-                <tr
-                  key={feature.label}
-                  className={`border-b border-gray-100 ${i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}
-                >
-                  <td className="py-3.5 px-6 text-sm text-gray-700">{feature.label}</td>
-                  <td className="py-3.5 px-6 text-center">
-                    <TableCell value={feature.free} />
-                  </td>
-                  <td className="py-3.5 px-6 text-center">
-                    <TableCell value={feature.pro} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {/* FAQ section */}
-      <section className="px-6 py-20 max-w-5xl mx-auto border-t border-gray-100">
-        <h2 className="text-2xl font-bold text-gray-900 mb-10 text-center">
-          Frequently asked questions
-        </h2>
-        <dl className="grid gap-8 md:grid-cols-2">
-          {FAQS.map(({ q, a }) => (
-            <div key={q}>
-              <dt className="text-base font-semibold text-gray-900 mb-2">{q}</dt>
-              <dd className="text-sm text-gray-500 leading-relaxed">{a}</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-
-      {/* Bottom CTA */}
-      <section className="px-6 py-20 max-w-5xl mx-auto text-center border-t border-gray-100">
-        <h2 className="text-2xl font-bold text-gray-900 mb-3">
-          Ready to map your network?
-        </h2>
-        <p className="text-gray-500 mb-8">
-          Join teams already uncovering warm paths to their next opportunity.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <Link
-            href="/signup"
-            className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
-          >
-            Get started free
+    <div style={{ background: bg, minHeight: "100vh", color: ink }}>
+      {/* ── Nav ── */}
+      <nav
+        style={{
+          maxWidth: 1200,
+          margin: "0 auto",
+          padding: "28px 32px 0",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <Logo />
+        <div style={{ display: "flex", alignItems: "center", gap: 28 }}>
+          <Link href="/" style={{ fontSize: 13, color: muted, textDecoration: "none" }}>
+            Product
           </Link>
           <Link
-            href="/login"
-            className="rounded-lg border border-gray-300 px-6 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+            href="/pricing"
+            style={{ fontSize: 13, color: ink, fontWeight: 600, textDecoration: "none" }}
           >
+            Pricing
+          </Link>
+          <Link href="/login" style={{ fontSize: 13, color: muted, textDecoration: "none" }}>
             Log in
           </Link>
+          <Link
+            href="/signup"
+            style={{
+              background: ink,
+              color: "#fff",
+              padding: "9px 16px",
+              borderRadius: 999,
+              fontSize: 12.5,
+              fontWeight: 500,
+              textDecoration: "none",
+            }}
+          >
+            Start free →
+          </Link>
+        </div>
+      </nav>
+
+      {/* ── Hero ── */}
+      <section
+        style={{
+          maxWidth: 1200,
+          margin: "0 auto",
+          padding: "100px 32px 40px",
+        }}
+      >
+        {/* Eyebrow */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            marginBottom: 32,
+          }}
+        >
+          <div style={{ width: 24, height: 1, background: muted }} />
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: muted,
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+            }}
+          >
+            — PRICING
+          </span>
+        </div>
+
+        {/* H1 */}
+        <h1
+          style={{
+            fontSize: "clamp(48px, 7vw, 88px)",
+            lineHeight: 1.02,
+            letterSpacing: "-0.03em",
+            fontWeight: 700,
+            maxWidth: "17ch",
+            margin: 0,
+          }}
+        >
+          Simple pricing. Free until your{" "}
+          <span style={{ ...serifStyle, color: accent }}>network</span> grows
+          past it.
+        </h1>
+
+        {/* Subheading */}
+        <p
+          style={{
+            marginTop: 28,
+            fontSize: 18,
+            color: muted,
+            maxWidth: 560,
+            lineHeight: 1.55,
+          }}
+        >
+          Start free for teams up to 5. Upgrade when you outgrow the limits —
+          never before. No hidden seats, no per-contact billing.
+        </p>
+
+        {/* Billing toggle */}
+        <div
+          style={{
+            marginTop: 36,
+            display: "inline-flex",
+            alignItems: "center",
+            padding: 4,
+            border: `1px solid ${rule}`,
+            borderRadius: 999,
+            background: "#fff",
+          }}
+        >
+          <button
+            onClick={() => setBilling("monthly")}
+            style={{
+              padding: "7px 16px",
+              borderRadius: 999,
+              border: "none",
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: "pointer",
+              background: billing === "monthly" ? ink : "transparent",
+              color: billing === "monthly" ? "#fff" : muted,
+            }}
+          >
+            Monthly
+          </button>
+          <button
+            onClick={() => setBilling("yearly")}
+            style={{
+              padding: "7px 16px",
+              borderRadius: 999,
+              border: "none",
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              background: billing === "yearly" ? ink : "transparent",
+              color: billing === "yearly" ? "#fff" : muted,
+            }}
+          >
+            Yearly
+            <span
+              style={{
+                fontSize: 11,
+                color: billing === "yearly" ? "#a5f3fc" : "#16a34a",
+              }}
+            >
+              save 17%
+            </span>
+          </button>
         </div>
       </section>
-    </main>
+
+      {/* ── Plan cards ── */}
+      <section
+        style={{
+          maxWidth: 1200,
+          margin: "0 auto",
+          padding: "20px 32px 80px",
+        }}
+      >
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: 20,
+          }}
+        >
+          {plans.map((plan) => (
+            <div
+              key={plan.name}
+              style={{ position: "relative" }}
+            >
+              {/* Badge */}
+              {plan.badge && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: -12,
+                    left: 28,
+                    background: ink,
+                    color: "#fff",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    letterSpacing: "0.05em",
+                    textTransform: "uppercase",
+                    padding: "5px 10px",
+                    borderRadius: 999,
+                    zIndex: 1,
+                  }}
+                >
+                  {plan.badge}
+                </div>
+              )}
+
+              {/* Card */}
+              <div
+                style={{
+                  border: plan.featured
+                    ? `1.5px solid ${accent}`
+                    : `1px solid ${rule}`,
+                  background: plan.featured ? accent : "#fff",
+                  color: plan.featured ? "#fff" : ink,
+                  padding: 32,
+                  borderRadius: 16,
+                  boxShadow: plan.featured
+                    ? `0 30px 60px -20px ${accent}55`
+                    : "0 1px 0 rgba(15,23,42,0.04)",
+                  height: "100%",
+                  boxSizing: "border-box" as const,
+                }}
+              >
+                {/* Plan name */}
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase" as const,
+                    color: plan.featured ? "rgba(255,255,255,0.8)" : muted,
+                  }}
+                >
+                  {plan.name}
+                </div>
+
+                {/* Price row */}
+                <div
+                  style={{
+                    marginTop: 14,
+                    display: "flex",
+                    alignItems: "baseline",
+                    gap: 6,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 56,
+                      fontWeight: 700,
+                      letterSpacing: "-0.03em",
+                      lineHeight: 1,
+                    }}
+                  >
+                    ${plan.price[billing]}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 13,
+                      color: plan.featured ? "rgba(255,255,255,0.7)" : muted,
+                    }}
+                  >
+                    {plan.price[billing] === 0
+                      ? ""
+                      : billing === "monthly"
+                      ? "/ mo"
+                      : "/ mo, billed yearly"}
+                  </span>
+                </div>
+
+                {/* Tagline */}
+                <p
+                  style={{
+                    marginTop: 6,
+                    fontSize: 12.5,
+                    color: plan.featured ? "rgba(255,255,255,0.75)" : muted,
+                    margin: "6px 0 0",
+                  }}
+                >
+                  {plan.tagline}
+                </p>
+
+                {/* CTA */}
+                {plan.href.startsWith("mailto:") ? (
+                  <a
+                    href={plan.href}
+                    style={{
+                      marginTop: 22,
+                      display: "block",
+                      textAlign: "center",
+                      padding: "12px 16px",
+                      borderRadius: 10,
+                      fontSize: 14,
+                      fontWeight: 600,
+                      background: plan.featured ? "#fff" : ink,
+                      color: plan.featured ? accent : "#fff",
+                      textDecoration: "none",
+                    }}
+                  >
+                    {plan.cta}
+                  </a>
+                ) : (
+                  <Link
+                    href={plan.href}
+                    style={{
+                      marginTop: 22,
+                      display: "block",
+                      textAlign: "center",
+                      padding: "12px 16px",
+                      borderRadius: 10,
+                      fontSize: 14,
+                      fontWeight: 600,
+                      background: plan.featured ? "#fff" : ink,
+                      color: plan.featured ? accent : "#fff",
+                      textDecoration: "none",
+                    }}
+                  >
+                    {plan.cta}
+                  </Link>
+                )}
+
+                {/* Feature list */}
+                <ul
+                  style={{
+                    marginTop: 28,
+                    padding: 0,
+                    listStyle: "none",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10,
+                  }}
+                >
+                  {plan.features.map((feature) => (
+                    <li
+                      key={feature}
+                      style={{
+                        display: "flex",
+                        gap: 10,
+                        fontSize: 13,
+                        lineHeight: 1.4,
+                        color: plan.featured ? "rgba(255,255,255,0.95)" : ink,
+                      }}
+                    >
+                      <CheckIcon featured={plan.featured} />
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Comparison table ── */}
+      <section
+        style={{
+          maxWidth: 1200,
+          margin: "0 auto",
+          padding: "60px 32px 80px",
+          borderTop: `1px solid ${rule}`,
+        }}
+      >
+        {/* Eyebrow */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            marginBottom: 20,
+          }}
+        >
+          <div style={{ width: 24, height: 1, background: muted }} />
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: muted,
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+            }}
+          >
+            — COMPARE
+          </span>
+        </div>
+
+        {/* H2 */}
+        <h2
+          style={{
+            fontSize: 40,
+            letterSpacing: "-0.02em",
+            fontWeight: 700,
+            lineHeight: 1.05,
+            margin: 0,
+          }}
+        >
+          Every feature, side by{" "}
+          <span style={{ ...serifStyle, color: accent }}>side</span>.
+        </h2>
+
+        {/* Table */}
+        <div
+          style={{
+            marginTop: 40,
+            border: `1px solid ${rule}`,
+            borderRadius: 14,
+            overflow: "hidden",
+            background: "#fff",
+          }}
+        >
+          {/* Header row */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "2fr 1fr 1fr 1fr",
+              background: bg,
+              padding: "14px 20px",
+              borderBottom: `1px solid ${rule}`,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                color: muted,
+              }}
+            >
+              Feature
+            </span>
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                color: muted,
+                textAlign: "center",
+              }}
+            >
+              Free
+            </span>
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                color: accent,
+                textAlign: "center",
+              }}
+            >
+              Pro
+            </span>
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                color: muted,
+                textAlign: "center",
+              }}
+            >
+              Team
+            </span>
+          </div>
+
+          {/* Data rows */}
+          {comparisonRows.map(([feature, free, pro, team], i) => (
+            <div
+              key={feature}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "2fr 1fr 1fr 1fr",
+                padding: "14px 20px",
+                borderBottom:
+                  i < comparisonRows.length - 1 ? `1px solid ${rule}` : "none",
+                fontSize: 13.5,
+              }}
+            >
+              <span style={{ color: ink, fontWeight: 500 }}>{feature}</span>
+              <TableCell value={free} />
+              <TableCell value={pro} />
+              <TableCell value={team} />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── FAQ ── */}
+      <section
+        style={{
+          maxWidth: 1200,
+          margin: "0 auto",
+          padding: "60px 32px 80px",
+          borderTop: `1px solid ${rule}`,
+        }}
+      >
+        {/* Eyebrow */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            marginBottom: 20,
+          }}
+        >
+          <div style={{ width: 24, height: 1, background: muted }} />
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: muted,
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+            }}
+          >
+            — FREQUENTLY ASKED
+          </span>
+        </div>
+
+        {/* H2 */}
+        <h2
+          style={{
+            fontSize: 40,
+            letterSpacing: "-0.02em",
+            fontWeight: 700,
+            marginBottom: 36,
+            marginTop: 0,
+          }}
+        >
+          Questions, answered.
+        </h2>
+
+        {/* 2-col grid */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 0,
+            borderTop: `1px solid ${rule}`,
+          }}
+        >
+          {faqs.map((faq, i) => {
+            const isLeft = i % 2 === 0;
+            return (
+              <div
+                key={faq.q}
+                style={{
+                  padding: "28px 0",
+                  paddingRight: isLeft ? 40 : 0,
+                  paddingLeft: isLeft ? 0 : 40,
+                  borderBottom: `1px solid ${rule}`,
+                  borderLeft: isLeft ? "none" : `1px solid ${rule}`,
+                }}
+              >
+                <h3
+                  style={{
+                    fontSize: 17,
+                    fontWeight: 600,
+                    letterSpacing: "-0.01em",
+                    margin: 0,
+                  }}
+                >
+                  {faq.q}
+                </h3>
+                <p
+                  style={{
+                    marginTop: 10,
+                    marginBottom: 0,
+                    fontSize: 14,
+                    color: muted,
+                    lineHeight: 1.6,
+                  }}
+                >
+                  {faq.a}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* ── Footer CTA ── */}
+      <section
+        style={{
+          maxWidth: 1200,
+          margin: "0 auto",
+          padding: "100px 32px 60px",
+          textAlign: "center",
+        }}
+      >
+        <h2
+          style={{
+            fontSize: "clamp(40px, 5vw, 64px)",
+            fontWeight: 700,
+            letterSpacing: "-0.03em",
+            lineHeight: 1.05,
+            margin: 0,
+          }}
+        >
+          Try Pro free for 14 days.
+          <br />
+          <span style={{ ...serifStyle, color: accent }}>No card required.</span>
+        </h2>
+        <Link
+          href="/signup"
+          style={{
+            marginTop: 28,
+            display: "inline-block",
+            background: ink,
+            color: "#fff",
+            padding: "15px 26px",
+            borderRadius: 999,
+            fontSize: 15,
+            fontWeight: 600,
+            textDecoration: "none",
+          }}
+        >
+          Start your trial →
+        </Link>
+      </section>
+
+      {/* ── Footer ── */}
+      <footer
+        style={{
+          maxWidth: 1200,
+          margin: "0 auto",
+          padding: "40px 32px",
+          borderTop: `1px solid ${rule}`,
+          display: "flex",
+          justifyContent: "space-between",
+          fontSize: 12,
+          color: muted,
+        }}
+      >
+        <span>© 2026 NetMap, Inc.</span>
+        <div style={{ display: "flex", gap: 24 }}>
+          <a href="#" style={{ color: muted, textDecoration: "none" }}>
+            Privacy
+          </a>
+          <a href="#" style={{ color: muted, textDecoration: "none" }}>
+            Terms
+          </a>
+          <a href="#" style={{ color: muted, textDecoration: "none" }}>
+            hello@netmap.app
+          </a>
+        </div>
+      </footer>
+    </div>
   );
 }
