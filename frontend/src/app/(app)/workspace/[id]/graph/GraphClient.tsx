@@ -86,9 +86,6 @@ function ContactNode({ data }: NodeProps<ContactNodeData>) {
     return (
       <div className="bg-indigo-600 border border-indigo-700 rounded-lg shadow-sm px-4 py-3 min-w-[140px] max-w-[200px] cursor-default">
         <Handle type="target" position={Position.Top} className="!bg-indigo-300" />
-        <span className="inline-block text-[10px] font-semibold uppercase tracking-wide text-indigo-200 bg-indigo-500 rounded-full px-1.5 py-0.5 mb-1">
-          Member
-        </span>
         <p className="text-sm font-semibold text-white truncate">{data.label}</p>
         {data.subtitle && (
           <p className="text-xs text-indigo-200 mt-0.5 truncate">{data.subtitle}</p>
@@ -111,6 +108,76 @@ function ContactNode({ data }: NodeProps<ContactNodeData>) {
 }
 
 const nodeTypes = { contactNode: ContactNode };
+
+// ─── Force-directed layout ────────────────────────────────────────────────────
+
+function applyForceLayout(
+  nodes: Node<ContactNodeData>[],
+  edges: RFEdge[]
+): Node<ContactNodeData>[] {
+  if (nodes.length === 0) return nodes;
+
+  const W = 2200, H = 1600;
+  const k = Math.sqrt((W * H) / Math.max(nodes.length, 1));
+
+  // Start from current positions (or spread in a circle if all at origin)
+  const pos = nodes.map((n) => ({ id: n.id, x: n.position.x, y: n.position.y }));
+
+  const idToIdx = new Map(pos.map((p, i) => [p.id, i]));
+
+  for (let iter = 0; iter < 80; iter++) {
+    const disp = pos.map(() => ({ x: 0, y: 0 }));
+
+    // Repulsive forces between all pairs
+    for (let u = 0; u < pos.length; u++) {
+      for (let v = u + 1; v < pos.length; v++) {
+        const dx = pos[v].x - pos[u].x;
+        const dy = pos[v].y - pos[u].y;
+        const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 1);
+        const f = (k * k) / dist;
+        const fx = (f * dx) / dist;
+        const fy = (f * dy) / dist;
+        disp[u].x -= fx;
+        disp[u].y -= fy;
+        disp[v].x += fx;
+        disp[v].y += fy;
+      }
+    }
+
+    // Attractive forces along edges
+    for (const e of edges) {
+      const u = idToIdx.get(e.source);
+      const v = idToIdx.get(e.target);
+      if (u == null || v == null) continue;
+      const dx = pos[v].x - pos[u].x;
+      const dy = pos[v].y - pos[u].y;
+      const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 1);
+      const f = (dist * dist) / k;
+      const fx = (f * dx) / dist;
+      const fy = (f * dy) / dist;
+      disp[u].x += fx;
+      disp[u].y += fy;
+      disp[v].x -= fx;
+      disp[v].y -= fy;
+    }
+
+    // Cool temperature
+    const temp = (W / 10) * Math.max(1 - iter / 80, 0.05);
+
+    for (let u = 0; u < pos.length; u++) {
+      const mag = Math.max(Math.sqrt(disp[u].x ** 2 + disp[u].y ** 2), 0.001);
+      pos[u].x += (disp[u].x / mag) * Math.min(mag, temp);
+      pos[u].y += (disp[u].y / mag) * Math.min(mag, temp);
+      pos[u].x = Math.max(-W / 2, Math.min(W / 2, pos[u].x));
+      pos[u].y = Math.max(-H / 2, Math.min(H / 2, pos[u].y));
+    }
+  }
+
+  return nodes.map((n) => {
+    const p = pos[idToIdx.get(n.id)!];
+    return { ...n, position: { x: p.x, y: p.y } };
+  });
+}
 
 // ─── Inner canvas (needs ReactFlowProvider context) ───────────────────────────
 
@@ -136,6 +203,14 @@ function InnerGraph({
   const [search, setSearch] = useState("");
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const { fitView } = useReactFlow();
+
+  const handleAutoArrange = useCallback(() => {
+    setNodes((nds) => {
+      const arranged = applyForceLayout(nds, edges);
+      setTimeout(() => fitView({ duration: 600 }), 50);
+      return arranged;
+    });
+  }, [edges, fitView, setNodes]);
 
   // ── Path-find state ────────────────────────────────────────────────────────
   const [pathMode, setPathMode] = useState(false);
@@ -454,7 +529,25 @@ function InnerGraph({
         }}
       >
         <Background gap={20} color="#e5e7eb" />
-        <Controls />
+        <Controls>
+          <button
+            title="Auto arrange"
+            onClick={handleAutoArrange}
+            className="react-flow__controls-button"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="3" cy="3" r="1.5" />
+              <circle cx="13" cy="3" r="1.5" />
+              <circle cx="8" cy="13" r="1.5" />
+              <circle cx="13" cy="8" r="1.5" />
+              <circle cx="3" cy="10" r="1.5" />
+              <line x1="4.5" y1="3" x2="11.5" y2="3" />
+              <line x1="3" y1="4.5" x2="3" y2="8.5" />
+              <line x1="13" y1="4.5" x2="13" y2="6.5" />
+              <line x1="4.5" y1="10" x2="6.5" y2="12" />
+            </svg>
+          </button>
+        </Controls>
         <MiniMap
           nodeColor="#6366f1"
           maskColor="rgba(0,0,0,0.05)"
@@ -680,10 +773,11 @@ export default function GraphClient({ workspaceId }: GraphClientProps) {
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-indigo-600" />
-          <p className="text-sm text-gray-400">Loading graph…</p>
-        </div>
+        <img
+          src="/loaders/netmap-loader.gif"
+          alt="Loading"
+          style={{ width: 64, height: 64, mixBlendMode: "multiply" }}
+        />
       </div>
     );
   }

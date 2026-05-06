@@ -25,8 +25,50 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState<string | null>(null);
 
   const supabase = createClient();
+
+  async function handleOAuth(provider: "google" | "github") {
+    setError(null);
+    setOauthLoading(provider);
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=${next}`,
+        skipBrowserRedirect: true,
+      },
+    });
+
+    if (error || !data.url) {
+      setError(error?.message ?? "OAuth failed");
+      setOauthLoading(null);
+      return;
+    }
+
+    const popup = window.open(data.url, "oauth-popup", "width=500,height=650,scrollbars=yes,resizable=yes");
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type === "oauth-success") {
+        window.removeEventListener("message", handleMessage);
+        clearInterval(pollClosed);
+        setOauthLoading(null);
+        router.push(next);
+        router.refresh();
+      }
+    };
+    window.addEventListener("message", handleMessage);
+
+    const pollClosed = setInterval(() => {
+      if (popup?.closed) {
+        clearInterval(pollClosed);
+        window.removeEventListener("message", handleMessage);
+        setOauthLoading(null);
+      }
+    }, 500);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -52,14 +94,15 @@ export default function LoginPage() {
         color: ink,
         minHeight: "100vh",
         fontFamily: "var(--font-sans)",
-        display: "grid",
-        gridTemplateColumns: "1fr 1fr",
+        display: "flex",
+        flexDirection: "column",
         paddingBottom: 80,
       }}
     >
-      {/* ── Left column: form ── */}
+      {/* ── Form column ── */}
       <div
         style={{
+          flex: 1,
           padding: "40px 56px",
           display: "flex",
           flexDirection: "column",
@@ -99,29 +142,6 @@ export default function LoginPage() {
             width: "100%",
           }}
         >
-          {/* Eyebrow */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              marginBottom: 14,
-            }}
-          >
-            <div style={{ width: 24, height: 1, background: muted }} />
-            <span
-              style={{
-                fontSize: 12,
-                textTransform: "uppercase",
-                fontWeight: 600,
-                color: muted,
-                letterSpacing: "0.04em",
-              }}
-            >
-              00 — Welcome back
-            </span>
-          </div>
-
           {/* H1 */}
           <h1
             style={{
@@ -135,7 +155,6 @@ export default function LoginPage() {
           >
             Sign back{" "}
             <span style={{ ...serifStyle, color: accent }}>in</span>
-            .
           </h1>
 
           {/* Subtitle */}
@@ -148,6 +167,8 @@ export default function LoginPage() {
             {/* Google */}
             <button
               type="button"
+              onClick={() => handleOAuth("google")}
+              disabled={!!oauthLoading}
               style={{
                 flex: 1,
                 padding: "10px 12px",
@@ -157,12 +178,13 @@ export default function LoginPage() {
                 fontSize: 13,
                 fontWeight: 500,
                 color: ink,
-                cursor: "pointer",
+                cursor: oauthLoading ? "not-allowed" : "pointer",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 gap: 8,
                 fontFamily: "inherit",
+                opacity: oauthLoading && oauthLoading !== "google" ? 0.5 : 1,
               }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24">
@@ -177,6 +199,8 @@ export default function LoginPage() {
             {/* GitHub */}
             <button
               type="button"
+              onClick={() => handleOAuth("github")}
+              disabled={!!oauthLoading}
               style={{
                 flex: 1,
                 padding: "10px 12px",
@@ -186,12 +210,13 @@ export default function LoginPage() {
                 fontSize: 13,
                 fontWeight: 500,
                 color: ink,
-                cursor: "pointer",
+                cursor: oauthLoading ? "not-allowed" : "pointer",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 gap: 8,
                 fontFamily: "inherit",
+                opacity: oauthLoading && oauthLoading !== "github" ? 0.5 : 1,
               }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -335,7 +360,7 @@ export default function LoginPage() {
               }}
             >
               {loading ? (
-                <img src="/loaders/netmap-loader.gif" alt="Signing in" style={{ width: 24, height: 24 }} />
+                <img src="/loaders/netmap-loader.svg" alt="Signing in" style={{ width: 24, height: 24 }} />
               ) : (
                 "Sign in →"
               )}
@@ -346,7 +371,7 @@ export default function LoginPage() {
           <p style={{ marginTop: 20, fontSize: 13, color: muted, textAlign: "center" }}>
             New to NetMap?{" "}
             <Link href="/signup" style={{ color: ink, fontWeight: 600, textDecoration: "none" }}>
-              Create a workspace
+              Create an account
             </Link>
           </p>
         </div>
@@ -372,88 +397,6 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* ── Right column: testimonial sidebar ── */}
-      <div
-        style={{
-          background: "#f0ece0",
-          borderLeft: `1px solid ${rule}`,
-          padding: 56,
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "space-between",
-        }}
-      >
-        {/* Top label */}
-        <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: muted, letterSpacing: "0.04em" }}>
-          fig. 1 — testimonial
-        </div>
-
-        {/* Quote block */}
-        <div>
-          <div
-            style={{
-              fontSize: 96,
-              lineHeight: 0.7,
-              color: accent,
-              fontFamily: "var(--font-serif)",
-              fontStyle: "italic",
-            }}
-          >
-            &ldquo;
-          </div>
-          <p
-            style={{
-              margin: "4px 0 28px",
-              fontSize: 26,
-              lineHeight: 1.25,
-              letterSpacing: "-0.015em",
-              fontWeight: 500,
-              color: ink,
-              maxWidth: "20ch",
-            }}
-          >
-            We closed our seed round entirely through warm intros from our NetMap graph. Zero cold emails.
-          </p>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <div
-              style={{
-                width: 44,
-                height: 44,
-                borderRadius: 999,
-                background: accent,
-                color: "white",
-                fontWeight: 700,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 14,
-              }}
-            >
-              MH
-            </div>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>Maya Henriksen</div>
-              <div style={{ fontSize: 12, color: muted }}>Founder, Parallel · YC W25</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Stats */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 18 }}>
-          {(
-            [
-              ["23×", "reply lift"],
-              ["8 min", "to set up"],
-              ["0", "cold emails"],
-            ] as [string, string][]
-          ).map(([n, l], i) => (
-            <div key={i} style={{ borderTop: `1px solid ${rule}`, paddingTop: 12 }}>
-              <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.02em" }}>{n}</div>
-              <div style={{ fontSize: 11, color: muted, marginTop: 2 }}>{l}</div>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
 import WorkspaceShell from "./WorkspaceShell";
+import WorkspaceSwitcher from "./WorkspaceSwitcher";
 import { workspacesApi } from "@/lib/api";
 
 interface WorkspaceRead {
@@ -54,9 +55,10 @@ export default async function WorkspaceLayout({
   if (!user) redirect("/login");
 
   const token = session.access_token;
-  const [workspace, me] = await Promise.all([
+  const [workspace, me, allWorkspaces] = await Promise.all([
     getWorkspace(id, token),
     getMe(id, token),
+    workspacesApi.list(token).catch(() => [] as WorkspaceRead[]),
   ]);
 
   // Default to true so we don't block if the API is unavailable
@@ -74,11 +76,13 @@ export default async function WorkspaceLayout({
           NetMap
         </Link>
 
-        {/* Center: workspace name */}
+        {/* Center: workspace switcher */}
         <div className="flex-1 flex justify-center">
-          <span className="font-medium text-foreground truncate max-w-xs">
-            {workspace?.name ?? "Workspace"}
-          </span>
+          <WorkspaceSwitcher
+            currentId={id}
+            currentName={workspace?.name ?? "Workspace"}
+            workspaces={(allWorkspaces as WorkspaceRead[]).map((w) => ({ id: w.id, name: w.name }))}
+          />
         </div>
 
         {/* Right: nav links */}
@@ -100,13 +104,6 @@ export default async function WorkspaceLayout({
             className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           >
             Settings
-          </Link>
-          <Link
-            href="/settings"
-            className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            title="Account settings"
-          >
-            Account
           </Link>
         </nav>
       </header>

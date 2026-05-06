@@ -46,8 +46,8 @@ netmap/
 │   │   │           ├── tags.py         ✅ CRUD + attach/detach to contacts
 │   │   │           ├── search.py       ✅ workspace contact search (name/company/title/email/tags)
 │   │   │           ├── paths.py        ✅ BFS second-degree path discovery
-│   │   │           ├── billing.py      🔲 not yet implemented
-│   │   │           └── admin.py        🔲 not yet implemented
+│   │   │           ├── billing.py      ✅ Stripe checkout/portal/webhook
+│   │   │           └── admin.py        ✅ users, workspaces, subscriptions (superadmin)
 │   │   ├── core/
 │   │   │   ├── config.py           Settings from env
 │   │   │   ├── security.py         JWT validation, role guards
@@ -65,11 +65,11 @@ netmap/
 │   │   │   └── plan.py             ✅ tier, max_members, max_contacts, stripe_subscription_id
 │   │   ├── schemas/                Pydantic request/response
 │   │   │   ├── user.py             ✅
-│   │   │   ├── workspace.py        ✅ MemberProfileRead
+│   │   │   ├── workspace.py        ✅ MemberProfileRead; WorkspaceRead includes member_count + contact_count
 │   │   │   ├── contact.py          ✅ includes tags[] and is_self
 │   │   │   ├── edge.py             ✅
 │   │   │   ├── tags.py             ✅
-│   │   │   └── billing.py          🔲 not yet implemented
+│   │   │   └── billing.py          ✅ BillingPortalResponse, CheckoutSessionResponse
 │   │   ├── services/               Business logic (no HTTP here)
 │   │   │   ├── workspace_service.py
 │   │   │   ├── contact_service.py
@@ -93,15 +93,18 @@ netmap/
 │   │   │   ├── (marketing)/        Public pages (landing, pricing)
 │   │   │   ├── (auth)/             Login, signup, invite accept
 │   │   │   ├── (app)/              Protected app shell
-│   │   │   │   ├── dashboard/          ✅ workspace list + create
+│   │   │   │   ├── dashboard/          ✅ editorial design; workspace cards with member+contact counts
+│   │   │   │   │   ├── page.tsx            server component; session check; passes workspaces to grid
+│   │   │   │   │   ├── WorkspaceGrid.tsx   client component; always-visible stats row per card
+│   │   │   │   │   └── UserMenu.tsx        avatar dropdown — Settings, Help, Sign out
 │   │   │   │   ├── workspace/[id]/
 │   │   │   │   │   ├── layout.tsx      ✅ fetches /me, shows ProfileSetupModal if incomplete
 │   │   │   │   │   ├── ProfileSetupModal.tsx  ✅ blocking, no close until submitted
 │   │   │   │   │   ├── WorkspaceShell.tsx     ✅ client wrapper managing modal state
-│   │   │   │   │   ├── graph/          ✅ React Flow canvas, member nodes (indigo), connect/delete edges, search filter, path finder (Find path toggle, BFS highlight)
-│   │   │   │   │   ├── contacts/       ✅ table + tag badges + tag filter chips + add/edit panel
+│   │   │   │   │   ├── graph/          ✅ React Flow canvas, member nodes (indigo), connect/delete edges, search filter, path finder, auto-arrange (force layout), netmap-loader.gif on load
+│   │   │   │   │   ├── contacts/       ✅ table + tag badges + tag filter chips + add/edit panel + CSV import + CSV export
 │   │   │   │   │   └── settings/       ✅ rename, members, invite link, delete workspace
-│   │   │   │   └── settings/           🔲 user account settings (stub)
+│   │   │   │   └── settings/           ✅ email display, password change, danger zone (delete account)
 │   │   │   └── (admin)/            Superadmin panel
 │   │   │       ├── analytics/      PostHog dashboard embed
 │   │   │       ├── users/
@@ -258,10 +261,24 @@ Legend: ✅ Done | 🔲 Not started
     - Backend: GET/DELETE /admin/users, GET /admin/workspaces, PATCH /admin/workspaces/{id}/plan, GET /admin/subscriptions
     - Frontend: /admin layout with sidebar + superadmin guard; Users, Workspaces, Analytics (placeholder), Subscriptions pages
 
-### Outstanding smaller items
-- `/settings` user account page — complete (email display, password change with re-auth, danger zone)
-  - Linked from dashboard header (email click) and workspace nav ("Account" link)
+### Additional completed items
+- Dashboard redesigned in editorial inline-style system (`#faf8f3` bg, serif accent headings, workspace cards with member + contact count stats)
+- Avatar dropdown (`UserMenu.tsx`) in dashboard header — Settings, Help, Sign out
+- `WorkspaceRead` extended with `member_count` and `contact_count` (computed in list endpoint)
+- CSV export on contacts page — exports current filtered view; client-side, no backend call
+- Graph auto-arrange button in React Flow Controls panel — Fruchterman-Reingold force layout, 80 iterations
+- Graph loading state uses `netmap-loader.gif` instead of CSS spinner
+- Login / signup pages redesigned: single-column editorial layout, no testimonial sidebar
+- Signup: email + password + confirm password only (workspace/name setup via onboarding modal post-login)
+- Pricing page Pro price updated to $4.99/mo to match landing page
+- `scripts/seed_direct.py` — seeds a "Demo Network" workspace with 95 contacts + 193 edges directly via DB
 - Stripe webhook to upgrade `plans.tier` + `max_members` / `max_contacts` — complete (POST /billing/webhook)
+- Google & GitHub OAuth — popup-based flow (`skipBrowserRedirect: true`); `/auth/callback/route.ts` exchanges code, `/auth/popup-success/page.tsx` posts message to parent and closes popup
+- Supabase project ref: `lxhagvynwyrrqckeoqcp`; redirect URL: `https://lxhagvynwyrrqckeoqcp.supabase.co/auth/v1/callback`
+- Dashboard footer pinned to bottom of viewport (flex column + `flex:1` on main)
+- Workspace cards no longer show slug (`/workspace-name`)
+- Workspace nav: removed Account link; replaced workspace name with `WorkspaceSwitcher.tsx` — scroll-drum picker showing 3 items, snaps one-by-one, click centered item to navigate
+- Graph: removed "Member" badge from self-contact (indigo) nodes; color alone distinguishes them
 
 ---
 

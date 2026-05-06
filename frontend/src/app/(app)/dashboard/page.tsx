@@ -2,6 +2,21 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
 import { workspacesApi } from "@/lib/api";
+import WorkspaceGrid from "./WorkspaceGrid";
+import UserMenu from "./UserMenu";
+
+// ─── design tokens ────────────────────────────────────────────────────────────
+const bg = "#faf8f3";
+const ink = "#0f172a";
+const accent = "#4f46e5";
+const muted = "#64748b";
+const rule = "#e7e2d4";
+
+const serifStyle: React.CSSProperties = {
+  fontFamily: "var(--font-serif)",
+  fontStyle: "italic",
+  fontWeight: 400,
+};
 
 async function getWorkspaces(accessToken: string) {
   try {
@@ -20,54 +35,114 @@ export default async function DashboardPage() {
   const workspaces = await getWorkspaces(session.access_token);
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border px-6 py-4 flex items-center justify-between">
-        <span className="font-semibold text-lg">NetMap</span>
+    <div style={{ background: bg, color: ink, minHeight: "100vh", fontFamily: "var(--font-sans)", display: "flex", flexDirection: "column" }}>
+      {/* Header */}
+      <header
+        style={{
+          borderBottom: `1px solid ${rule}`,
+          padding: "0 48px",
+          height: 60,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
         <Link
-          href="/settings"
-          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-          title="Account settings"
+          href="/"
+          style={{ display: "flex", alignItems: "center", gap: 10, color: ink, textDecoration: "none" }}
         >
-          {user.email}
+          <svg width={22} height={22} viewBox="0 0 32 32" fill="none">
+            <line x1="9" y1="9" x2="23" y2="9" stroke="#94a3b8" strokeWidth="1.75" strokeLinecap="round" />
+            <line x1="9" y1="9" x2="16" y2="23" stroke="#94a3b8" strokeWidth="1.75" strokeLinecap="round" />
+            <line x1="23" y1="9" x2="16" y2="23" stroke="#94a3b8" strokeWidth="1.75" strokeLinecap="round" />
+            <circle cx="9" cy="9" r="4.25" fill="#4f46e5" />
+            <circle cx="23" cy="9" r="4.25" fill="#ffffff" stroke="#0f172a" strokeWidth="1.75" />
+            <circle cx="16" cy="23" r="4.25" fill="#ffffff" stroke="#0f172a" strokeWidth="1.75" />
+          </svg>
+          <span style={{ fontSize: 16, fontWeight: 600, letterSpacing: "-0.01em" }}>NetMap</span>
         </Link>
+        <UserMenu email={user.email ?? ""} />
       </header>
 
-      <main className="max-w-4xl mx-auto px-6 py-10 space-y-8">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">Your workspaces</h1>
+      {/* Main */}
+      <main style={{ maxWidth: 1080, margin: "0 auto", padding: "64px 48px", flex: 1, width: "100%" }}>
+        {/* Title row */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "space-between",
+            marginBottom: 40,
+          }}
+        >
+          <h1
+            style={{
+              fontSize: 52,
+              fontWeight: 700,
+              letterSpacing: "-0.025em",
+              lineHeight: 1.05,
+              margin: 0,
+            }}
+          >
+            Your{" "}
+            <span style={{ ...serifStyle, color: accent }}>workspaces</span>
+          </h1>
           <Link
             href="/dashboard/new"
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            style={{
+              padding: "11px 22px",
+              borderRadius: 10,
+              background: accent,
+              color: "#fff",
+              fontSize: 14,
+              fontWeight: 600,
+              textDecoration: "none",
+            }}
           >
             New workspace
           </Link>
         </div>
 
+        {/* Grid or empty state */}
         {workspaces.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border p-12 text-center space-y-3">
-            <p className="text-muted-foreground text-sm">No workspaces yet.</p>
+          <div
+            style={{
+              border: `1.5px dashed ${rule}`,
+              borderRadius: 12,
+              padding: "80px 0",
+              textAlign: "center",
+            }}
+          >
+            <p style={{ fontSize: 15, color: muted, margin: "0 0 16px" }}>No workspaces yet.</p>
             <Link
               href="/dashboard/new"
-              className="text-sm font-medium text-primary hover:underline"
+              style={{ fontSize: 14, fontWeight: 600, color: accent, textDecoration: "none" }}
             >
-              Create your first workspace
+              Create your first workspace →
             </Link>
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {workspaces.map((ws: { id: string; name: string; slug: string }) => (
-              <Link
-                key={ws.id}
-                href={`/workspace/${ws.id}/graph`}
-                className="rounded-lg border border-border p-5 hover:bg-accent transition-colors space-y-1"
-              >
-                <p className="font-medium">{ws.name}</p>
-                <p className="text-xs text-muted-foreground">/{ws.slug}</p>
-              </Link>
-            ))}
-          </div>
+          <WorkspaceGrid workspaces={workspaces} />
         )}
       </main>
+
+      {/* Footer */}
+      <footer
+        style={{
+          borderTop: `1px solid ${rule}`,
+          padding: "20px 48px",
+          display: "flex",
+          justifyContent: "space-between",
+          fontSize: 11,
+          color: muted,
+        }}
+      >
+        <span>© 2026 NetMap, Inc.</span>
+        <div style={{ display: "flex", gap: 16 }}>
+          <Link href="/privacy" style={{ color: muted, textDecoration: "none" }}>Privacy</Link>
+          <Link href="/terms" style={{ color: muted, textDecoration: "none" }}>Terms</Link>
+        </div>
+      </footer>
     </div>
   );
 }
